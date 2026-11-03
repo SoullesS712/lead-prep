@@ -1,0 +1,9 @@
+{
+  "name": "Lead Prep — Competency 2026",
+  "short_name": "Lead Prep",
+  "start_url": "competency-2026-train.html",
+  "display": "standalone",
+  "background_color": "#FAFAF8",
+  "theme_color": "#3A5A40",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
