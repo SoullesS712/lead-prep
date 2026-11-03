@@ -1,0 +1,61 @@
+src/tests/tsim2.js
+  s_a77a31b6d8d954::t_b352ebca197181 1-10,12-20,22-94
+  s_a77a31b6d8d954::t_95b460937bd8b7 11,21
+src/theme.css
+  s_a77a31b6d8d954::t_8ce9d99c9b843f 61
+  s_a77a31b6d8d954::t_48455962c6069a 1-60,62-66
+competency-2026-train.html
+  s_a77a31b6d8d954::t_8ce9d99c9b843f 71
+  s_a77a31b6d8d954::t_b352ebca197181 34,45,48-62,95,103-104,107-108,157-158,160-165,1027-1034,1038,1048,1051,1073,1102-1103,1115-1120,1159-1160,1168-1169,1181,1185,1270,1376,1447,1487,1504,1506,1517-1528,1531,1542,1551,1567,1594-1595,1597,1602-1616,1624-1626,1633,1636,1640-1641,1643,1646,1712
+  s_a77a31b6d8d954::t_9af91cc833dc86 63-70,72-76,1053,1055-1072,1074-1075
+src/build.py
+  s_a77a31b6d8d954::t_93495291b9ed1a 6-27
+  s_a77a31b6d8d954::t_39c1fb21c22159 3-5
+  s_a77a31b6d8d954::t_2fd0657a44a716 28
+  s_a77a31b6d8d954::t_d95bd6be246e65 1-2
+src/tests/sim.js
+  s_a77a31b6d8d954::t_b352ebca197181 1-53
+competency-2026-exam.html
+  s_a77a31b6d8d954::t_8ce9d99c9b843f 69-74,80-81,85
+  s_a77a31b6d8d954::t_d75722df428861 32,43,46-68,95,120-122,141,738-758,813,832,846-847,984-994,1025,1039,1155,1157,1315-1318
+src/tests/esim.js
+  s_a77a31b6d8d954::t_b352ebca197181 1-56
+.gitignore
+  s_a77a31b6d8d954::t_472a160b1ea0f0 1-2
+src/app.css
+  s_a77a31b6d8d954::t_d43f9c99f0b94f 1-88
+src/core.js
+  s_a77a31b6d8d954::t_edeb765c37058d 1-164
+src/labs.js
+  s_a77a31b6d8d954::t_0b0c59ccc74aaa 1-69
+src/lessons1.js
+  s_a77a31b6d8d954::t_30eadeda686c8a 1-211
+src/lessons2.js
+  s_a77a31b6d8d954::t_f6740f91d73f8a 1-290
+src/posttests.js
+  s_a77a31b6d8d954::t_a8273702427f41 1-122
+src/prog.js
+  s_a77a31b6d8d954::t_c5d29eede488d6 1-147
+src/runner.js
+  s_a77a31b6d8d954::t_de2cec53059c9d 1-211
+src/shell2.html
+  s_a77a31b6d8d954::t_21a806c00960ea 1-21
+src/views.js
+  s_a77a31b6d8d954::t_74570f722cd5ac 1-336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.3",
+  "base_commit_sha": "ecc727d5dd57f5b8a6e37c1a6a94a3689cbed48d",
+  "prompts": {},
+  "sessions": {
+    "s_a77a31b6d8d954": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "941e6151-45ec-418f-bd70-3b29dd8257e3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "SoullesS712 <sakyasorn62@gmail.com>"
+    }
+  }
+}
