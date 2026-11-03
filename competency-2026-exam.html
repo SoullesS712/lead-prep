@@ -29,10 +29,9 @@ th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:none}
 .done{background:var(--ok-soft);color:var(--green)}
 textarea,select,input{font:inherit;color:var(--text)}
 textarea{width:100%;background:var(--code);border:1px solid var(--border);border-radius:10px;padding:12px;font-family:ui-monospace,Consolas,'Courier New',monospace;font-size:.86rem;resize:vertical;tab-size:4;line-height:1.5}
-textarea:focus,select:focus,input:focus{outline:2px solid var(--blue);outline-offset:-1px}
+textarea:focus,select:focus,input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--accent-soft)}
 select,input[type=date],input[type=time]{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color-scheme:light dark}
 .opt{display:block;width:100%;text-align:left;margin:8px 0;padding:12px 14px;border:1px solid var(--border);background:var(--bg2);border-radius:12px;font:inherit;color:var(--text);cursor:pointer;transition:border-color .15s,background .15s}
-.opt:hover{border-color:var(--muted)}
 .opt.sel{border-color:var(--blue);background:var(--accent-soft)}
 .opt.correct{border-color:var(--green);background:var(--ok-soft)}
 .opt.wrong{border-color:var(--red);background:var(--bad-soft)}
@@ -41,20 +40,49 @@ select,input[type=date],input[type=time]{background:var(--bg2);border:1px solid 
 .bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;min-width:60px}
 .bar>div{height:100%;background:var(--green);border-radius:3px}
 .toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:.92rem;z-index:50;box-shadow:0 6px 24px rgba(0,0,0,.18);max-width:calc(100% - 32px)}
-dialog{border:none;border-radius:16px;padding:22px;max-width:440px;width:calc(100% - 32px);background:var(--bg2);color:var(--text);box-shadow:0 10px 40px rgba(0,0,0,.25)}
+dialog{margin:auto;border:none;border-radius:16px;padding:22px;max-width:440px;width:calc(100% - 32px);background:var(--bg2);color:var(--text);box-shadow:0 10px 40px rgba(0,0,0,.25)}
 dialog::backdrop{background:rgba(0,0,0,.4)}
 dialog h3{margin-bottom:8px}dialog ul{margin:8px 0 16px 20px}dialog li{margin:4px 0}
+/* ---- interaction: กดแล้วต้องเข้ากับรูปทรงมน ไม่ใช่กรอบสี่เหลี่ยมสีฟ้าของ WebView ---- */
+*{-webkit-tap-highlight-color:transparent}
+button,a,summary,.opt,.item,label{touch-action:manipulation;-webkit-user-select:none;user-select:none}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+textarea,input,select{-webkit-user-select:text;user-select:text}
+button,.btn,.opt,.item,.vcard,.gbtn,.day,.seg button,.bnav button,details>summary{transition:background-color .15s ease,border-color .15s ease,transform .12s ease,opacity .15s ease,box-shadow .15s ease}
+button:active:not(:disabled),.btn:active,.opt:active,.vcard:active,.exam-card:active{transform:scale(.98)}
+.item:active,details>summary:active{opacity:.6}
+@media (hover:hover){
+  .opt:hover:not(.correct):not(.wrong):not(.sel){border-color:var(--muted)}
+  .item:hover .chev{transform:translateX(2px)}
+}
+input[type=checkbox]{accent-color:var(--blue);width:20px;height:20px;cursor:pointer}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}button:active,.btn:active,.opt:active,.vcard:active,.exam-card:active{transform:none!important}}
+/* ---- modal ตาม theme ---- */
+dialog.ui-dialog{padding:0;max-width:400px}
+.ui-dialog .in{padding:22px 22px 16px}
+.ui-dialog h3{font-size:1.1rem;font-weight:700;margin:0 0 6px}
+.ui-dialog p{color:var(--muted);line-height:1.6;margin:0}
+.ui-dialog-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.ui-btn{font:inherit;cursor:pointer;min-height:44px;padding:10px 18px;border-radius:12px;border:1px solid var(--border);background:var(--bg2);color:var(--text)}
+.ui-btn.primary{background:var(--blue);border-color:var(--blue);color:var(--bg);font-weight:600}
+.ui-btn.danger{background:var(--red);border-color:var(--red);color:var(--bg);font-weight:600}
+.ui-btn:active{transform:scale(.97)}
+dialog[open]{animation:dlg-in .18s ease}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+@keyframes dlg-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){dialog[open]{animation:none}}
 
 .wrap{max-width:1040px;margin:0 auto;padding:20px 16px 48px}
 h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em;margin-bottom:4px}
 h2{font-size:1.05rem;font-weight:700;margin:0 0 10px}
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:var(--shadow)}
-button{font:inherit;cursor:pointer;border:1px solid var(--border);border-radius:10px;padding:9px 16px;background:var(--bg2);color:var(--text)}
-button:hover{border-color:var(--muted)}
+button{font:inherit;cursor:pointer;border:1px solid var(--border);border-radius:12px;padding:10px 16px;min-height:44px;background:var(--bg2);color:var(--text)}
+@media (hover:hover){button:hover:not(:disabled){border-color:var(--muted)}.btn-primary:hover{filter:brightness(1.08)}}
 button:disabled{opacity:.45;cursor:default}
 .btn-primary{background:var(--blue);border-color:var(--blue);color:var(--bg);font-weight:600}
 .btn-green{background:var(--ok-soft);border-color:transparent;color:var(--green);font-weight:600}
-.btn-red{background:var(--red);border-color:var(--red);color:#fff;font-weight:600}
+.btn-red{background:var(--red);border-color:var(--red);color:var(--bg);font-weight:600}
 .back{display:inline-block;margin-bottom:14px;text-decoration:none;font-size:.92rem}
 .topbar{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .timer{font-size:1.35rem;font-weight:700;font-variant-numeric:tabular-nums;padding:2px 12px;border-radius:10px;background:var(--bg3)}
@@ -64,7 +92,7 @@ button:disabled{opacity:.45;cursor:default}
 .layout{display:grid;grid-template-columns:1fr 240px;gap:14px;margin-top:14px}
 @media(max-width:820px){.layout{grid-template-columns:1fr}.side{order:-1}}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(36px,1fr));gap:6px}
-.gbtn{padding:6px 0;font-size:.8rem;border-radius:8px}
+.gbtn{padding:6px 0;min-height:38px;font-size:.8rem;border-radius:10px}
 .gbtn.answered{background:var(--accent-soft);border-color:var(--blue);color:var(--blue)}
 .gbtn.flagged{outline:2px solid var(--orange);outline-offset:1px}
 .gbtn.current{box-shadow:0 0 0 2px var(--text) inset}
@@ -89,6 +117,9 @@ textarea.prompt{width:100%;min-height:200px;background:var(--bg2);font-family:in
 .start-btn{width:100%;font-size:1.05rem;padding:14px;margin-top:6px}
 .resume{border-color:var(--yellow);background:var(--warn-soft)}
 .hist td{font-variant-numeric:tabular-nums}
+.seg{display:flex;background:var(--bg3);border-radius:12px;padding:3px;gap:3px;flex-wrap:wrap}
+.seg button{flex:1;font:inherit;font-size:.9rem;border:none;background:none;color:var(--muted);padding:8px 10px;border-radius:9px;min-height:40px;white-space:nowrap}
+.seg button.on{background:var(--bg2);color:var(--text);font-weight:600;box-shadow:var(--shadow)}
 details.more>summary{cursor:pointer;color:var(--muted);font-size:.9rem;padding:4px 0}
 </style>
 </head>
@@ -107,7 +138,7 @@ details.more>summary{cursor:pointer;color:var(--muted);font-size:.9rem;padding:4
   <div class="vgrid" id="versionPick"></div>
   <div class="step-label">เทียบกับระดับ</div>
   <div class="row-flex">
-    <select id="rolePick" onchange="ROLE=this.value;renderWeightTable()"></select>
+    <div class="seg" id="rolePick" style="flex:1"></div>
   </div>
   <details class="more" style="margin-top:10px"><summary>ดูน้ำหนักและระดับที่ต้องได้รายทักษะ</summary>
     <div style="overflow-x:auto;margin-top:8px"><table id="weightTable"></table></div>
@@ -704,6 +735,27 @@ const MODES = {
 };
 function lsGet(k){ try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
 function lsSet(k, v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+/* ---------- modal ยืนยัน/แจ้งเตือน ตาม theme (แทน confirm/alert ของระบบที่เป็นกล่องสีขาว) ---------- */
+function uiDialog(msg, opts){
+  opts = opts || {};
+  return new Promise(resolve => {
+    const d = document.createElement('dialog'); d.className = 'ui-dialog';
+    const box = document.createElement('div'); box.className = 'in';
+    if (opts.title) { const h = document.createElement('h3'); h.textContent = opts.title; box.appendChild(h); }
+    if (msg) { const p = document.createElement('p'); p.textContent = msg; box.appendChild(p); }
+    const row = document.createElement('div'); row.className = 'ui-dialog-actions';
+    const done = v => { d.close(); d.remove(); resolve(v); };
+    if (opts.cancel !== false) { const c = document.createElement('button'); c.className = 'ui-btn'; c.textContent = opts.cancel || 'ยกเลิก'; c.onclick = () => done(false); row.appendChild(c); }
+    const ok = document.createElement('button'); ok.className = 'ui-btn ' + (opts.danger ? 'danger' : 'primary'); ok.textContent = opts.ok || 'ตกลง';
+    ok.onclick = () => done(true); row.appendChild(ok);
+    box.appendChild(row); d.appendChild(box);
+    d.addEventListener('cancel', e => { e.preventDefault(); done(false); });   // ปุ่ม back / Esc
+    d.addEventListener('click', e => { if (e.target === d) done(false); });     // แตะนอกกล่อง
+    document.body.appendChild(d); d.showModal(); ok.focus({preventScroll: true});
+  });
+}
+const uiConfirm = (msg, opts) => uiDialog(msg, opts);
+const uiAlert = (msg, opts) => uiDialog(msg, Object.assign({cancel: false}, opts));
 function toast(msg, ms){ const t = el('div', 'toast', msg); document.body.appendChild(t); setTimeout(() => t.remove(), ms || 3500); }
 function fmt(ms){ const m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60; return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'); }
 // เก็บสถานะข้อสอบที่ทำค้าง (ทั้งสองโหมด) — ปิดแอป/รีเฟรชแล้วกลับมาทำต่อได้ เวลาของ Final เดินต่อจาก deadline เดิม
@@ -758,7 +810,7 @@ function renderResume(){
   const go1 = el('button', 'btn-primary', left != null && left <= 0 ? 'ส่งและดูผล' : 'ทำต่อ');
   go1.onclick = () => resumeRun(r);
   const drop = el('button', null, 'ทิ้งและเริ่มใหม่');
-  drop.onclick = () => { if (confirm('ทิ้งข้อสอบที่ทำค้างไว้?')) { lsSet(RUN_KEY, null); renderResume(); } };
+  drop.onclick = async () => { if (await uiConfirm('คำตอบที่ทำไว้จะหายทั้งหมด', {title: 'ทิ้งข้อสอบที่ทำค้าง?', ok: 'ทิ้ง', danger: true})) { lsSet(RUN_KEY, null); renderResume(); } };
   row.appendChild(go1); row.appendChild(drop); box.appendChild(row);
 }
 function renderHistory(){
@@ -777,7 +829,7 @@ function renderHistory(){
 }
 function renderRolePick(){
   const s = document.getElementById('rolePick'); s.innerHTML = '';
-  ROLES.forEach(r => { const o = el('option', null, r); o.value = r; if (r === ROLE) o.selected = true; s.appendChild(o); });
+  ROLES.forEach(r => { const b = el('button', r === ROLE ? 'on' : '', r); b.onclick = () => { ROLE = r; renderRolePick(); renderWeightTable(); saveRole(); }; s.appendChild(b); });
 }
 function renderWeightTable(){
   const t = document.getElementById('weightTable'), QS = VERSIONS[VER].Q, ri = roleIdx();
@@ -791,8 +843,8 @@ function renderWeightTable(){
   });
 }
 
-function startExam(){
-  if (lsGet(RUN_KEY) && !confirm('มีข้อสอบที่ทำค้างอยู่ เริ่มใหม่จะทิ้งของเดิม ต้องการเริ่มใหม่หรือไม่?')) return;
+async function startExam(){
+  if (lsGet(RUN_KEY) && !await uiConfirm('เริ่มใหม่จะทิ้งข้อสอบที่ทำค้างไว้', {title: 'มีข้อสอบที่ทำค้างอยู่', ok: 'เริ่มใหม่', danger: true})) return;
   if (MODE === 'final') {
     const v = VERSIONS[VER];
     document.getElementById('rulesList').innerHTML = '';
@@ -929,15 +981,17 @@ function go(i){
   if (q.type === 'js') {
     const lr = el('div', 'row-flex'); lr.style.marginBottom = '8px';
     lr.appendChild(el('span', 'muted', 'ภาษา:'));
-    const sel = el('select');
-    [['js', 'JavaScript (ตรวจอัตโนมัติ)'], ['cs', 'C# (ตรวจเองหลังส่ง ด้วย xUnit)']].forEach(([v, t]) => { const o = el('option', null, t); o.value = v; if (langs[i] === v) o.selected = true; sel.appendChild(o); });
-    sel.onchange = () => {
-      const fresh = codes[i].trim() === (langs[i] === 'cs' ? csStarter(q) : q.starter).trim();
-      langs[i] = sel.value;
-      if (fresh || confirm('เปลี่ยนภาษาจะล้างโค้ดที่เขียนไว้ ต้องการเปลี่ยนหรือไม่?')) codes[i] = sel.value === 'cs' ? csStarter(q) : q.starter;
-      else { langs[i] = sel.value === 'cs' ? 'js' : 'cs'; }
-      go(i);
-    };
+    const sel = el('div', 'seg'); sel.style.flex = '1';
+    [['js', 'JavaScript · ตรวจอัตโนมัติ'], ['cs', 'C# · ตรวจเองด้วย xUnit']].forEach(([v, t]) => {
+      const b = el('button', langs[i] === v ? 'on' : '', t);
+      b.onclick = async () => {
+        if (langs[i] === v) return;
+        const fresh = codes[i].trim() === (langs[i] === 'cs' ? csStarter(q) : q.starter).trim();
+        if (!fresh && !await uiConfirm('โค้ดที่เขียนไว้ในข้อนี้จะถูกล้าง', {title: 'เปลี่ยนภาษา?', ok: 'เปลี่ยนภาษา', danger: true})) return;
+        langs[i] = v; codes[i] = v === 'cs' ? csStarter(q) : q.starter; go(i);
+      };
+      sel.appendChild(b);
+    });
     lr.appendChild(sel); card.appendChild(lr);
   }
   if (q.type === 'sql') card.appendChild(el('div', 'muted', 'กด "ดูข้อมูล" เพื่อดูข้อมูลชุดตัวอย่าง'));
@@ -968,7 +1022,7 @@ function go(i){
     row.appendChild(peek);
   }
   const reset = el('button', null, 'Reset');
-  reset.onclick = () => { if (confirm('ล้างโค้ดกลับเป็นค่าเริ่มต้น?')) { codes[i] = langs[i] === 'cs' ? csStarter(q) : q.starter; go(i); } };
+  reset.onclick = async () => { if (await uiConfirm('โค้ดในข้อนี้จะกลับเป็นค่าเริ่มต้น', {title: 'ล้างโค้ด?', ok: 'ล้างโค้ด', danger: true})) { codes[i] = langs[i] === 'cs' ? csStarter(q) : q.starter; go(i); } };
   row.appendChild(reset);
   card.appendChild(row); card.appendChild(out);
   updateGrid();
@@ -982,7 +1036,7 @@ function renderPromptQ(q, i, card){
   pa.oninput = () => { prompts[i] = pa.value; upd(); updateGrid(); };
   card.appendChild(pa); card.appendChild(info); upd();
   const cp = el('button', 'btn-primary', '📋 คัดลอก prompt ไปวางใน AI'); cp.style.marginTop = '8px';
-  cp.onclick = () => { const p = promptProblem(q, prompts[i]); if (p) { alert(p); return; } copyText(wrapPrompt(q, prompts[i]), cp); };
+  cp.onclick = () => { const p = promptProblem(q, prompts[i]); if (p) { uiAlert(p, {title: 'ยังคัดลอก prompt ไม่ได้'}); return; } copyText(wrapPrompt(q, prompts[i]), cp); };
   card.appendChild(cp);
   card.appendChild(el('div', null, '\u00a0'));
   card.appendChild(el('b', null, '2) วางโค้ดที่ AI ตอบกลับมา (ห้ามแก้เอง)'));
@@ -1098,9 +1152,9 @@ async function runSqlPreview(queries, out, set){
 function normRows(res){ return JSON.stringify(res.values.map(r => r.map(v => typeof v === 'number' ? Math.round(v * 100) / 100 : v))); }
 
 /* ---------- submit & grade ---------- */
-function confirmSubmit(){
+async function confirmSubmit(){
   const left = Q.length - Q.filter((_, i) => isAnswered(i)).length;
-  if (confirm(left ? `ยังไม่ได้ทำ ${left} ข้อ ต้องการส่งเลยหรือไม่?` : 'ส่งข้อสอบ?')) submitExam();
+  if (await uiConfirm(left ? `ยังไม่ได้ทำ ${left} ข้อ ส่งแล้วแก้ไม่ได้` : 'ส่งแล้วแก้คำตอบไม่ได้', {title: 'ส่งข้อสอบ?', ok: 'ส่งข้อสอบ'})) submitExam();
 }
 
 async function submitExam(){
@@ -1258,6 +1312,10 @@ function renderReview(){
 
 window.addEventListener('beforeunload', () => saveRun());
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveRun(); });
+// ระดับเป้าหมายใช้ร่วมกับหน้าเรียน (เลือกที่ไหนก็ได้ อีกหน้าตามด้วย)
+const TRAIN_KEY = 'comp2026-lead-training-v1';
+function saveRole(){ const t = lsGet(TRAIN_KEY); if (t) { t.target = Object.assign({pass: 80}, t.target || {}, {role: ROLE}); lsSet(TRAIN_KEY, t); } }
+{ const t = lsGet(TRAIN_KEY); if (t && t.target && ROLES.includes(t.target.role)) ROLE = t.target.role; }
 renderModePick(); renderVersionPick(); renderRolePick(); renderWeightTable(); renderResume(); renderHistory();
 
 </script>

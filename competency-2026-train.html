@@ -31,10 +31,9 @@ th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:none}
 .done{background:var(--ok-soft);color:var(--green)}
 textarea,select,input{font:inherit;color:var(--text)}
 textarea{width:100%;background:var(--code);border:1px solid var(--border);border-radius:10px;padding:12px;font-family:ui-monospace,Consolas,'Courier New',monospace;font-size:.86rem;resize:vertical;tab-size:4;line-height:1.5}
-textarea:focus,select:focus,input:focus{outline:2px solid var(--blue);outline-offset:-1px}
+textarea:focus,select:focus,input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--accent-soft)}
 select,input[type=date],input[type=time]{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color-scheme:light dark}
 .opt{display:block;width:100%;text-align:left;margin:8px 0;padding:12px 14px;border:1px solid var(--border);background:var(--bg2);border-radius:12px;font:inherit;color:var(--text);cursor:pointer;transition:border-color .15s,background .15s}
-.opt:hover{border-color:var(--muted)}
 .opt.sel{border-color:var(--blue);background:var(--accent-soft)}
 .opt.correct{border-color:var(--green);background:var(--ok-soft)}
 .opt.wrong{border-color:var(--red);background:var(--bad-soft)}
@@ -43,9 +42,38 @@ select,input[type=date],input[type=time]{background:var(--bg2);border:1px solid 
 .bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;min-width:60px}
 .bar>div{height:100%;background:var(--green);border-radius:3px}
 .toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:.92rem;z-index:50;box-shadow:0 6px 24px rgba(0,0,0,.18);max-width:calc(100% - 32px)}
-dialog{border:none;border-radius:16px;padding:22px;max-width:440px;width:calc(100% - 32px);background:var(--bg2);color:var(--text);box-shadow:0 10px 40px rgba(0,0,0,.25)}
+dialog{margin:auto;border:none;border-radius:16px;padding:22px;max-width:440px;width:calc(100% - 32px);background:var(--bg2);color:var(--text);box-shadow:0 10px 40px rgba(0,0,0,.25)}
 dialog::backdrop{background:rgba(0,0,0,.4)}
 dialog h3{margin-bottom:8px}dialog ul{margin:8px 0 16px 20px}dialog li{margin:4px 0}
+/* ---- interaction: กดแล้วต้องเข้ากับรูปทรงมน ไม่ใช่กรอบสี่เหลี่ยมสีฟ้าของ WebView ---- */
+*{-webkit-tap-highlight-color:transparent}
+button,a,summary,.opt,.item,label{touch-action:manipulation;-webkit-user-select:none;user-select:none}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+textarea,input,select{-webkit-user-select:text;user-select:text}
+button,.btn,.opt,.item,.vcard,.gbtn,.day,.seg button,.bnav button,details>summary{transition:background-color .15s ease,border-color .15s ease,transform .12s ease,opacity .15s ease,box-shadow .15s ease}
+button:active:not(:disabled),.btn:active,.opt:active,.vcard:active,.exam-card:active{transform:scale(.98)}
+.item:active,details>summary:active{opacity:.6}
+@media (hover:hover){
+  .opt:hover:not(.correct):not(.wrong):not(.sel){border-color:var(--muted)}
+  .item:hover .chev{transform:translateX(2px)}
+}
+input[type=checkbox]{accent-color:var(--blue);width:20px;height:20px;cursor:pointer}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}button:active,.btn:active,.opt:active,.vcard:active,.exam-card:active{transform:none!important}}
+/* ---- modal ตาม theme ---- */
+dialog.ui-dialog{padding:0;max-width:400px}
+.ui-dialog .in{padding:22px 22px 16px}
+.ui-dialog h3{font-size:1.1rem;font-weight:700;margin:0 0 6px}
+.ui-dialog p{color:var(--muted);line-height:1.6;margin:0}
+.ui-dialog-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.ui-btn{font:inherit;cursor:pointer;min-height:44px;padding:10px 18px;border-radius:12px;border:1px solid var(--border);background:var(--bg2);color:var(--text)}
+.ui-btn.primary{background:var(--blue);border-color:var(--blue);color:var(--bg);font-weight:600}
+.ui-btn.danger{background:var(--red);border-color:var(--red);color:var(--bg);font-weight:600}
+.ui-btn:active{transform:scale(.97)}
+dialog[open]{animation:dlg-in .18s ease}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+@keyframes dlg-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){dialog[open]{animation:none}}
 
 .app{max-width:760px;margin:0 auto;padding:12px 16px 104px}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 0 14px}
@@ -64,7 +92,7 @@ h3{font-size:1rem;font-weight:700;margin:20px 0 6px}
 .item .main{flex:1;min-width:0}
 .item .ttl{font-weight:600;line-height:1.4}
 .item .sub{color:var(--muted);font-size:.84rem;margin-top:2px}
-.item .chev{color:var(--muted);font-size:1.1rem}
+.item .chev{color:var(--muted);font-size:1.1rem;display:inline-block;transition:transform .15s ease}
 .item.ok .ttl{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--border)}
 .dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);flex:0 0 22px;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;color:var(--bg)}
 .dot.half{border-color:var(--blue);background:linear-gradient(90deg,var(--blue) 50%,transparent 50%)}
@@ -72,12 +100,12 @@ h3{font-size:1rem;font-weight:700;margin:20px 0 6px}
 .dot.full::after{content:'✓';font-weight:800}
 .progress{height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin:10px 0 6px}
 .progress>div{height:100%;background:var(--blue);border-radius:4px;transition:width .3s}
-.btn{font:inherit;cursor:pointer;border:1px solid var(--border);border-radius:10px;padding:9px 16px;background:var(--bg2);color:var(--text);font-size:.92rem;text-decoration:none;display:inline-block}
-.btn:hover{border-color:var(--muted)}
+.btn{font:inherit;cursor:pointer;border:1px solid var(--border);border-radius:12px;padding:10px 18px;min-height:44px;background:var(--bg2);color:var(--text);font-size:.92rem;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+@media (hover:hover){.btn:hover{border-color:var(--muted)}.btn.primary:hover{filter:brightness(1.08)}.exam-card:hover{border-color:var(--muted)}}
 .btn.primary{background:var(--blue);border-color:var(--blue);color:var(--bg);font-weight:600}
 .btn.green{background:var(--ok-soft);border-color:transparent;color:var(--green);font-weight:600}
-.btn.small{padding:5px 11px;font-size:.82rem}
-.btn.block{display:block;width:100%;text-align:center;padding:13px}
+.btn.small{padding:6px 12px;font-size:.84rem;min-height:36px}
+.btn.block{display:flex;width:100%;padding:13px}
 button:disabled{opacity:.45;cursor:default}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
 .back{display:inline-block;color:var(--muted);text-decoration:none;font-size:.92rem;margin:2px 0 8px;cursor:pointer}
@@ -126,9 +154,15 @@ tr.today td{background:var(--accent-soft)}tr.past td{opacity:.55}td.nowrap{white
 .bnav{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-top:1px solid var(--border);display:flex;justify-content:center;z-index:20;padding-bottom:env(safe-area-inset-bottom)}
 .bnav .in{display:flex;max-width:760px;width:100%}
 .bnav button{flex:1;font:inherit;border:none;background:none;color:var(--muted);padding:9px 0 10px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.72rem;cursor:pointer}
-.bnav button svg{width:22px;height:22px}
-.bnav button.on{color:var(--blue);font-weight:700}
+.bnav button svg{width:22px;height:22px;box-sizing:content-box;padding:4px 18px;border-radius:999px;transition:background-color .2s ease}
+.bnav button.on{color:var(--blue);font-weight:700}.bnav button.on svg{background:var(--accent-soft)}
 .empty{color:var(--muted);text-align:center;padding:18px 0}
+button.choice{display:block;width:100%;text-align:left;font:inherit;color:var(--text);background:var(--bg2);border:1.5px solid var(--border);border-radius:16px;padding:16px 18px;margin:10px 0;cursor:pointer}
+button.choice.rec{border-color:var(--blue);background:var(--accent-soft)}
+button.choice .ch-top{display:flex;gap:8px;align-items:center;margin-bottom:4px}
+button.choice b{font-size:1.02rem}
+@media (hover:hover){button.choice:hover{border-color:var(--muted)}button.choice.rec:hover{border-color:var(--blue);filter:brightness(1.03)}}
+.in-app .bnav{padding-bottom:0}
 
 </style>
 </head>
@@ -990,10 +1024,18 @@ const COMPS = [
   ['Microservices',5.69,'micro'],['SQL',5.69,'sqlt'],['Monitoring & Logging',5.69,'mon'],['Unit & Functional Testing',5.69,'test'],
   ['Application Security',5.69,'sec'],['Container',2.98,'cont'],['Cloud',2.98,'cloud'],['CI/CD',1.63,'cicd'],['AI & Prompt Engineer',1.63,'ai']
 ];
+// ระดับที่ต้องได้ต่อทักษะ ตามตำแหน่ง (Junior, Senior, Lead, Expert, Manager) จาก sheet "competency"
+const ROLES = ['Junior', 'Senior', 'Lead', 'Expert', 'Manager'];
+const EXP = {code:'BIIAB', sysd:'BIIAI', db:'BIIAI', git:'BIIAB', fe:'BIAAB', oop:'BIIAB', sql:'BIIAB', prompt:'BIIAB', micro:'BIIAI',
+  sqlt:'BIIAB', mon:'BIIAI', test:'BIIAB', sec:'BIIAI', cont:'BIIAB', cloud:'IIIAI', cicd:'BIIAB', ai:'BIIIB'};
+const LESSON_COMP = {algo:'code', sqlt:'sqlt', pc:'prompt', sysd:'sysd', db:'db', micro:'micro', git:'git', oop:'oop', test:'test',
+  mon:'mon', fe:'fe', api:'fe', sec:'sec', cont:'cont', cicd:'cicd', cloud:'cloud', ai:'ai'};
+const CUT = {B:30, I:50, A:70};
+const PASS_OPTIONS = [60, 70, 80, 90];
 const GROUPS = [
   ['ฝึกมือ (น้ำหนักสูงสุด)', ['algo', 'sqlt', 'pc']],
   ['Architecture', ['sysd', 'db', 'micro']],
-  ['Web & API — ต้องได้ Advance', ['fe', 'api']],
+  ['Web & API', ['fe', 'api']],
   ['Engineering', ['oop', 'git', 'test', 'mon']],
   ['Security', ['sec']],
   ['DevOps & Cloud', ['cont', 'cicd', 'cloud']],
@@ -1003,13 +1045,34 @@ const LV = {B:'Beginner',I:'Intermediate',A:'Advance'};
 const KEY = 'comp2026-lead-training-v1', HIST_KEY = 'comp2026-exam-history';
 function ymd(d){ return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function parseYmd(s){ const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
-const freshState = () => ({lessons:{}, quiz:{}, pre:{}, post:{}, units:{}, prob:{}, sql:{}, prompt:{}, code:{}, practice:'code',
+const freshState = () => ({lessons:{}, quiz:{}, pre:{}, post:{}, units:{}, prob:{}, sql:{}, prompt:{}, code:{}, practice:'code', target:{role:'Lead', pass:80},
   sched:{examDate:'2026-11-23', time:'20:00', days:[0,1,2,3,4,5,6], start:ymd(new Date()), units:null}});
 let ST = freshState();
-try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) { ST = Object.assign(ST, s); ST.sched = Object.assign(freshState().sched, s.sched || {}); ['pre','post','units'].forEach(k => ST[k] = ST[k] || {}); } } catch (e) {}
+try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) { ST = Object.assign(ST, s); ST.sched = Object.assign(freshState().sched, s.sched || {}); ST.target = Object.assign({role:'Lead', pass:80}, s.target || {}); ['pre','post','units'].forEach(k => ST[k] = ST[k] || {}); } } catch (e) {}
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(ST)); } catch (e) {} }
-function resetProgress(){ if (confirm('ล้างความคืบหน้าทั้งหมด (pre/post-test, โจทย์, โค้ดที่เขียนไว้)? ตารางเรียนและการแจ้งเตือนยังอยู่')) { const sc = ST.sched; ST = freshState(); ST.sched = sc; save(); render(); } }
+async function resetProgress(){ if (await uiConfirm('ลบผล pre-test / post-test โจทย์ที่ผ่าน และโค้ดที่เขียนไว้ทั้งหมด ส่วนตารางเรียน การแจ้งเตือน และเป้าหมายยังอยู่', {title: 'ล้างความคืบหน้า?', ok: 'ล้างข้อมูล', danger: true})) { const sc = ST.sched, tg = ST.target; ST = freshState(); ST.sched = sc; ST.target = tg; save(); render(); } }
 
+/* ---------- modal ยืนยัน/แจ้งเตือน ตาม theme (แทน confirm/alert ของระบบที่เป็นกล่องสีขาว) ---------- */
+function uiDialog(msg, opts){
+  opts = opts || {};
+  return new Promise(resolve => {
+    const d = document.createElement('dialog'); d.className = 'ui-dialog';
+    const box = document.createElement('div'); box.className = 'in';
+    if (opts.title) { const h = document.createElement('h3'); h.textContent = opts.title; box.appendChild(h); }
+    if (msg) { const p = document.createElement('p'); p.textContent = msg; box.appendChild(p); }
+    const row = document.createElement('div'); row.className = 'ui-dialog-actions';
+    const done = v => { d.close(); d.remove(); resolve(v); };
+    if (opts.cancel !== false) { const c = document.createElement('button'); c.className = 'ui-btn'; c.textContent = opts.cancel || 'ยกเลิก'; c.onclick = () => done(false); row.appendChild(c); }
+    const ok = document.createElement('button'); ok.className = 'ui-btn ' + (opts.danger ? 'danger' : 'primary'); ok.textContent = opts.ok || 'ตกลง';
+    ok.onclick = () => done(true); row.appendChild(ok);
+    box.appendChild(row); d.appendChild(box);
+    d.addEventListener('cancel', e => { e.preventDefault(); done(false); });   // ปุ่ม back / Esc
+    d.addEventListener('click', e => { if (e.target === d) done(false); });     // แตะนอกกล่อง
+    document.body.appendChild(d); d.showModal(); ok.focus({preventScroll: true});
+  });
+}
+const uiConfirm = (msg, opts) => uiDialog(msg, opts);
+const uiAlert = (msg, opts) => uiDialog(msg, Object.assign({cancel: false}, opts));
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function html(tag, cls, h){ const e = el(tag, cls); e.innerHTML = h; return e; }
 function lvTag(lv){ return el('span', 'tag lv-' + lv, LV[lv]); }
@@ -1036,8 +1099,8 @@ const UNITS = [
   {id:'u5', t:'SQL Lab 6–10 (window, CTE, recursive)', h:2, sql:rng(5, 9)},
   {id:'u6', t:'System Design', h:1.5, lessons:['sysd']},
   {id:'u7', t:'Database Design', h:1.5, lessons:['db']},
-  {id:'u8', t:'Frontend (ต้องได้ Advance)', h:1.5, lessons:['fe']},
-  {id:'u9', t:'Backend & API (ต้องได้ Advance)', h:1.5, lessons:['api']},
+  {id:'u8', t:'Frontend', h:1.5, lessons:['fe']},
+  {id:'u9', t:'Backend & API', h:1.5, lessons:['api']},
   {id:'u10', t:'OOP + Git', h:2, lessons:['oop', 'git']},
   {id:'u11', t:'Testing + Monitoring', h:2, lessons:['test', 'mon']},
   {id:'u12', t:'Application Security', h:1.5, lessons:['sec']},
@@ -1049,7 +1112,12 @@ const UNITS = [
   {id:'u18', t:'ทบทวนทักษะที่ยังไม่ถึงเกณฑ์จากผลสอบ V1', h:1.5, manual:true},
   {id:'u19', t:'สอบ V2 แบบ Final รอบสุดท้าย เทียบกับครั้งแรก', h:2, manual:true, exam:true}
 ];
-const lessonPassed = id => !!(ST.post[id] && ST.post[id].pass);
+const role = () => ROLES.includes(ST.target.role) ? ST.target.role : 'Lead';
+const passPct = () => ST.target.pass || 80;
+const need = key => EXP[key][ROLES.indexOf(role())];
+const lessonNeed = l => need(LESSON_COMP[l.id] || 'code');
+// ผ่านเมื่อคะแนน post-test ที่ดีที่สุดถึงเกณฑ์ปัจจุบัน (เปลี่ยนเกณฑ์แล้วสถานะเปลี่ยนตาม)
+const lessonPassed = id => !!(ST.post[id] && ST.post[id].best >= passPct());
 function unitDone(u){
   if (u.manual) return !!ST.units[u.id];
   if (u.review) return LESSONS.every(l => lessonPassed(l.id));
@@ -1088,6 +1156,8 @@ const daysLeft = () => Math.round((parseYmd(ST.sched.examDate) - parseYmd(ymd(ne
 
 /* ---------- สะพานไปแอป Android (แจ้งเตือน) ---------- */
 const IN_APP = typeof AppBridge !== 'undefined';
+// ในแอป Flutter เว้นขอบล่างให้แล้ว (SafeArea) — ไม่ต้องเว้นซ้ำด้วย safe-area-inset
+if (IN_APP) document.documentElement.classList.add('in-app');
 function bridge(msg){ if (IN_APP) try { AppBridge.postMessage(JSON.stringify(msg)); } catch (e) {} }
 window.appMsg = m => {
   const n = document.getElementById('notifStatus'); if (!n) return;
@@ -1095,7 +1165,8 @@ window.appMsg = m => {
     : `ตั้งแจ้งเตือนแล้ว ${m.count} ครั้ง` + (m.exact === false ? ' (อาจคลาดเคลื่อนไม่กี่นาที)' : '');
   if (m.type === 'test') n.textContent = m.perm === false ? 'ยังไม่ได้รับสิทธิ์แจ้งเตือน' : 'ส่งแจ้งเตือนทดสอบแล้ว จะเด้งในอีกประมาณ 5 วินาที';
 };
-function sendSchedule(){
+// ask = ผู้ใช้กดบันทึกเอง → แอปขอสิทธิ์ที่ขาด (เปิดหน้าตั้งค่า) ได้; ตอนเปิดแอปจะไม่เด้งไปหน้าตั้งค่า
+function sendSchedule(ask){
   const [hh, mm] = ST.sched.time.split(':').map(Number), now = Date.now(), items = [];
   const exam = parseYmd(ST.sched.examDate);
   buildPlan().forEach((p, i) => {
@@ -1107,10 +1178,11 @@ function sendSchedule(){
   });
   const ed = new Date(exam); ed.setHours(7, 0, 0, 0);
   if (ed.getTime() > now) items.push({id: 999, at: ed.getTime(), title: 'วันนี้สอบ Competency', body: 'ทำปรนัยให้เร็ว เก็บเวลาไว้ให้ข้อ Coding อ่านข้อจำกัดก่อนเลือกอัลกอริทึม — สู้ ๆ', hash: '#/today'});
-  bridge({type: 'schedule', items});
+  bridge({type: 'schedule', items, ask: !!ask});
   return items.length;
 }
 
+/* ================= ตัวรันโค้ด JS (Web Worker) + หน้าฝึก Coding / SQL Lab / Prompt Lab ================= */
 /* ---------- JS runner ---------- */
 const WORKER_SRC = `onmessage = e => {
   const { code, fn, tests } = e.data;
@@ -1195,7 +1267,7 @@ function renderProblems(m){
       const ok = showResult(out, await runJs(ta.value, p.fn, tests), tests);
       if (ok && !ST.prob[p.id]) { ST.prob[p.id] = true; save(); s.appendChild(el('span', 'tag done', '✓ ผ่าน')); }
     };
-    const rs = el('button', 'btn', 'Reset'); rs.onclick = () => { if (confirm('ล้างโค้ด?')) { ta.value = p.starter; ST.code[p.id] = p.starter; save(); } };
+    const rs = el('button', 'btn', 'Reset'); rs.onclick = async () => { if (await uiConfirm('โค้ดที่เขียนไว้ในโจทย์นี้จะหายไป', {title: 'ล้างโค้ด?', ok: 'ล้างโค้ด', danger: true})) { ta.value = p.starter; ST.code[p.id] = p.starter; save(); } };
     row.appendChild(run); row.appendChild(rs); b.appendChild(row); b.appendChild(out);
     b.appendChild(reveal('💡 คำใบ้', p.hint));
     b.appendChild(reveal('เฉลย JavaScript', p.sol));
@@ -1301,7 +1373,7 @@ function renderPromptLab(m){
     pa.oninput = () => { ST.code[task.id + '-p'] = pa.value; save(); upd(); }; upd();
     b.appendChild(pa); b.appendChild(info);
     const cp = el('button', 'btn primary', '📋 คัดลอก prompt ไปวางใน AI');
-    cp.onclick = () => { const p = promptIssue(pa.value); if (p) { alert(p); return; } copyText(wrapPrompt(task, pa.value), cp); };
+    cp.onclick = () => { const p = promptIssue(pa.value); if (p) { uiAlert(p, {title: 'ยังคัดลอก prompt ไม่ได้'}); return; } copyText(wrapPrompt(task, pa.value), cp); };
     const r1 = el('div', 'row'); r1.appendChild(cp); b.appendChild(r1);
     b.appendChild(el('b', null, '2) วางคำตอบของ AI'));
     const ca = codeArea(task.id + '-c', '', 10); ca.placeholder = 'วางคำตอบของ AI ทั้งหมด ระบบจะดึงโค้ดจาก code block ให้'; b.appendChild(ca);
@@ -1372,7 +1444,7 @@ function viewToday(m){
   const plan = buildPlan(), todayP = plan.find(p => p.date === today);
   const hero = el('div', 'card hero');
   hero.appendChild(html('div', 'big', left > 0 ? `${left}<small>วันก่อนสอบ</small>` : left === 0 ? 'วันนี้สอบ' : 'สอบแล้ว'));
-  hero.appendChild(el('div', 'muted', 'วันสอบ ' + thDate(sc.examDate) + ' ' + (parseYmd(sc.examDate).getFullYear() + 543)));
+  hero.appendChild(el('div', 'muted', 'วันสอบ ' + thDate(sc.examDate) + ' ' + (parseYmd(sc.examDate).getFullYear() + 543) + ' · เป้าหมาย ' + role()));
   const done = UNITS.filter(unitDone).length;
   const pr = el('div', 'progress'), f = el('div'); f.style.width = (done / UNITS.length * 100) + '%'; pr.appendChild(f);
   hero.appendChild(pr);
@@ -1412,7 +1484,7 @@ function viewToday(m){
     t1.appendChild(box);
   });
   const rb = el('button', 'btn small', 'จัดตารางใหม่จากวันนี้ (เฉพาะที่ยังไม่เสร็จ)');
-  rb.onclick = () => { if (!confirm('จัดหน่วยที่ยังไม่เสร็จลงวันที่เหลือตั้งแต่วันนี้ถึงวันสอบใหม่?')) return; sc.start = today; sc.units = UNITS.filter(u => !unitDone(u)).map(u => u.id); save(); sendSchedule(); render(); };
+  rb.onclick = async () => { if (!await uiConfirm('หน่วยที่ยังไม่เสร็จจะถูกกระจายลงวันที่เหลือ ตั้งแต่วันนี้ถึงวันก่อนสอบ', {title: 'จัดตารางใหม่?', ok: 'จัดตารางใหม่'})) return; sc.start = today; sc.units = UNITS.filter(u => !unitDone(u)).map(u => u.id); save(); sendSchedule(); render(); };
   t1.appendChild(el('p', 'muted', 'หน่วยบทเรียนจะเสร็จอัตโนมัติเมื่อผ่าน post-test และโจทย์ครบ · หน่วยสอบให้ติ๊กเอง'));
   t1.appendChild(rb);
 
@@ -1429,9 +1501,9 @@ function viewToday(m){
   const ar = el('div', 'row');
   const sv = el('button', 'btn primary', IN_APP ? 'บันทึกและตั้งแจ้งเตือน' : 'บันทึก');
   sv.onclick = () => {
-    if (!ex.value || !tm.value || !picked.size) { alert('เลือกวันสอบ เวลา และวันเรียนอย่างน้อย 1 วัน'); return; }
+    if (!ex.value || !tm.value || !picked.size) { uiAlert('เลือกวันสอบ เวลา และวันเรียนอย่างน้อย 1 วัน', {title: 'ข้อมูลยังไม่ครบ'}); return; }
     sc.examDate = ex.value; sc.time = tm.value; sc.days = [...picked].sort(); save();
-    const n = sendSchedule(); render();
+    const n = sendSchedule(true); render();
     const st = document.getElementById('notifStatus'); if (st) st.textContent = IN_APP ? `กำลังตั้งแจ้งเตือน ${n} ครั้ง…` : 'บันทึกแล้ว';
   };
   ar.appendChild(sv);
@@ -1442,11 +1514,21 @@ function viewToday(m){
   t2.appendChild(ns);
   if (IN_APP) t2.appendChild(el('p', 'muted', 'ถ้าแจ้งเตือนไม่ดัง (vivo/OPPO/Xiaomi): ตั้งแบตเตอรี่ของแอปเป็น "ไม่จำกัด" และเปิด "เริ่มอัตโนมัติ"'));
 
-  const t3 = fold('เกณฑ์ระดับ Lead');
-  t3.appendChild(html('p', 'b', 'ต้องได้ <b>Intermediate (≥ 50%)</b> ทุกทักษะ และ <b>Advance (≥ 70%)</b> ใน Web &amp; Mobile (รวม Backend/API) · ข้อ B/I/A ได้ 1/2/3 คะแนน · ข้อ Coding มักถือน้ำหนักทั้งทักษะ'));
+  const t3 = fold(`เป้าหมายและเกณฑ์ · ${role()} · ผ่าน ${passPct()}%`);
+  const segOf = (opts, cur, fn, label) => {
+    t3.appendChild(el('div', 'muted', label));
+    const sg = el('div', 'seg');
+    opts.forEach(o => { const b = el('button', String(o) === String(cur) ? 'on' : '', String(o) + (typeof o === 'number' ? '%' : '')); b.onclick = () => fn(o); sg.appendChild(b); });
+    t3.appendChild(sg);
+  };
+  const keepOpen = () => { render(); const f = [...document.querySelectorAll('details.fold')].find(d => /เป้าหมายและเกณฑ์/.test(d.textContent)); if (f) f.open = true; };
+  segOf(ROLES, role(), r => { ST.target.role = r; save(); keepOpen(); }, 'ระดับเป้าหมาย (ใช้กับหน้าข้อสอบด้วย)');
+  segOf(PASS_OPTIONS, passPct(), v => { ST.target.pass = v; save(); keepOpen(); }, 'post-test ต้องได้เท่าไรจึงนับว่า "เข้าใจแล้ว"');
+  const cnt = lv => COMPS.filter(c => need(c[2]) === lv).length;
+  t3.appendChild(html('p', 'b', `ระดับ <b>${role()}</b> ต้องได้ Advance (≥ ${CUT.A}%) ${cnt('A')} ทักษะ · Intermediate (≥ ${CUT.I}%) ${cnt('I')} ทักษะ · Beginner (≥ ${CUT.B}%) ${cnt('B')} ทักษะ — ข้อ B/I/A ได้ 1/2/3 คะแนน`));
   const tw = el('div', 'tw'), t = el('table');
   t.innerHTML = '<tr><th>ทักษะ</th><th>น้ำหนัก</th><th>ต้องได้</th></tr>';
-  COMPS.forEach(([n, w]) => { const tr = el('tr'); tr.appendChild(el('td', null, n)); tr.appendChild(el('td', null, w.toFixed(2) + '%')); const lt = el('td'); lt.appendChild(lvTag(n.startsWith('Web') ? 'A' : 'I')); tr.appendChild(lt); t.appendChild(tr); });
+  COMPS.forEach(([n, w, k]) => { const tr = el('tr'); tr.appendChild(el('td', null, n.replace(' (Advance)', ''))); tr.appendChild(el('td', null, w.toFixed(2) + '%')); const lt = el('td'); lt.appendChild(lvTag(need(k))); tr.appendChild(lt); t.appendChild(tr); });
   tw.appendChild(t); t3.appendChild(tw);
 
   const rs = el('button', 'btn small', 'ล้างความคืบหน้า'); rs.style.marginTop = '22px'; rs.onclick = resetProgress; m.appendChild(rs);
@@ -1457,7 +1539,7 @@ function labeled(text, input){ const l = el('label', 'fld'); l.appendChild(el('s
 function lessonDot(id){ return lessonPassed(id) ? 'dot full' : ST.pre[id] ? 'dot half' : 'dot'; }
 function viewLearn(m){
   m.appendChild(el('h1', null, 'บทเรียน'));
-  m.appendChild(el('p', 'muted', 'ทุกบท: pre-test → เรียน → post-test (ผ่าน ≥ 80% = เข้าใจแล้ว)'));
+  m.appendChild(el('p', 'muted', `ทุกบท: pre-test → เรียน → post-test (ผ่าน ≥ ${passPct()}% = เข้าใจแล้ว) · เป้าหมาย ${role()}`));
   GROUPS.forEach(([g, ids]) => {
     m.appendChild(el('div', 'section-label', g));
     const c = el('div', 'card'); c.style.padding = '2px 16px';
@@ -1466,7 +1548,7 @@ function viewLearn(m){
       a.appendChild(el('span', lessonDot(l.id)));
       const mm = el('div', 'main'); mm.appendChild(el('div', 'ttl', shortTitle(l)));
       const p = ST.post[l.id];
-      mm.appendChild(el('div', 'sub', (p ? (p.pass ? `เข้าใจแล้ว · ${p.best}%` : `post ${p.best}% · ยังไม่ผ่าน`) : ST.pre[l.id] ? 'กำลังเรียน' : `~${l.min} นาที`) + ' · ' + LV[l.target]));
+      mm.appendChild(el('div', 'sub', (p ? (lessonPassed(l.id) ? `เข้าใจแล้ว · ${p.best}%` : `post ${p.best}% · ยังไม่ผ่าน`) : ST.pre[l.id] ? 'กำลังเรียน' : `~${l.min} นาที`) + ' · ต้องได้ ' + LV[lessonNeed(l)]));
       a.appendChild(mm); a.appendChild(el('span', 'chev', '›'));
       c.appendChild(a);
     });
@@ -1475,7 +1557,6 @@ function viewLearn(m){
 }
 
 /* ---------- บทเรียน (หน้าบท): pre-test → บทเรียน → post-test ---------- */
-const PASS_PCT = 80;
 const PRACTICE_AFTER = {algo: 'code', sqlt: 'sql', pc: 'prompt'};
 function viewLesson(m, l){
   const b = el('a', 'back', '← บทเรียน'); b.href = '#/learn'; m.appendChild(b);
@@ -1483,7 +1564,7 @@ function viewLesson(m, l){
   m.appendChild(el('div', 'muted', subTitle(l)));
   const meta = el('div', 'meta');
   meta.appendChild(el('span', 'tag', l.comp + ' · ' + l.w.toFixed(2) + '%'));
-  meta.appendChild(lvTag(l.target));
+  meta.appendChild(lvTag(lessonNeed(l)));
   meta.appendChild(el('span', 'tag', '~' + l.min + ' นาที'));
   m.appendChild(meta);
   const body = el('div'); m.appendChild(body);
@@ -1510,15 +1591,29 @@ const postQs = l => (POST[l.id] || []).concat(l.quiz);
 function lessonTags(l, meta){
   meta.querySelectorAll('.tag.st').forEach(t => t.remove());
   const p = ST.pre[l.id], t = ST.post[l.id];
-  if (p) meta.appendChild(el('span', 'tag st', p.skip ? 'pre: ข้าม' : `pre ${p.pct}%`));
-  if (t) meta.appendChild(el('span', 'tag st' + (t.pass ? ' done' : ''), t.pass ? `เข้าใจแล้ว · ${t.best}%` : `post ${t.best}%`));
+  if (p) meta.appendChild(el('span', 'tag st', p.skip ? (p.read ? 'อ่านก่อน' : 'pre: ข้าม') : `pre ${p.pct}%`));
+  if (t) meta.appendChild(el('span', 'tag st' + (lessonPassed(l.id) ? ' done' : ''), lessonPassed(l.id) ? `เข้าใจแล้ว · ${t.best}%` : `post ${t.best}%`));
 }
-function fillLesson(l, body, meta){
+function fillLesson(l, body, meta, startPre){
   lessonTags(l, meta);
   const refill = () => { body.innerHTML = ''; fillLesson(l, body, meta); };
   const pre = ST.pre[l.id], post = ST.post[l.id];
   const sp = el('div', 'stepper'); [true, !!pre, !!pre && !!post].forEach(on => sp.appendChild(el('span', on ? 'on' : ''))); body.appendChild(sp);
-  body.appendChild(stepHead(1, 'Pre-test', pre ? (pre.skip ? 'ข้าม' : `${pre.ok}/${pre.n}`) : ''));
+  body.appendChild(stepHead(1, pre || startPre ? 'Pre-test' : 'เริ่มบทเรียน', pre ? (pre.skip ? 'ข้าม' : `${pre.ok}/${pre.n}`) : ''));
+  if (!pre && !startPre) {
+    // ให้เลือกเองว่าจะวัดผลก่อน หรืออ่านเนื้อหาเลย
+    body.appendChild(el('p', 'muted', 'เลือกวิธีเริ่มบทนี้'));
+    const pick = (title, desc, tag, primary, fn) => {
+      const b = el('button', 'choice' + (primary ? ' rec' : ''));
+      const top = el('div', 'ch-top'); top.appendChild(el('b', null, title)); if (tag) top.appendChild(el('span', 'tag lv-I', tag));
+      b.appendChild(top); b.appendChild(el('div', 'muted', desc)); b.onclick = fn; body.appendChild(b);
+    };
+    pick('ทำ pre-test ก่อน', `${l.quiz.length} ข้อ ประมาณ 2 นาที · รู้ว่าตัวเองรู้อะไรแล้ว แล้วเทียบผลกับ post-test ได้`, 'แนะนำ', true,
+      () => { body.innerHTML = ''; fillLesson(l, body, meta, true); });
+    pick('อ่านเนื้อหาเลย', 'ข้ามการวัดผลก่อนเรียน ยังทำ post-test ท้ายบทได้ตามปกติ (แต่จะไม่มีคะแนนก่อน–หลังให้เทียบ)', '', false,
+      () => { ST.pre[l.id] = {skip: true, read: true}; save(); refill(); window.scrollTo(0, 0); });
+    return;
+  }
   if (!pre) {
     body.appendChild(el('p', 'muted', `${l.quiz.length} ข้อ ตอบตามที่รู้จริง ไม่รู้ให้เลือก "ยังไม่รู้" — ใช้วัดว่าเรียนแล้วเข้าใจขึ้นเท่าไร ไม่มีผลต่อการผ่าน`));
     body.appendChild(renderTest(shuffledQs(l.quiz), {dontKnow: true, label: 'ส่ง pre-test', onDone: (ok, n, res) => {
@@ -1526,28 +1621,29 @@ function fillLesson(l, body, meta){
       const go = el('button', 'btn primary', 'เริ่มเรียน →'); go.onclick = () => { refill(); window.scrollTo(0, 0); };
       res.parentNode.appendChild(go);
     }}));
-    const sk = el('button', 'btn small', 'ข้าม pre-test'); sk.onclick = () => { ST.pre[l.id] = {skip: true}; save(); refill(); };
-    body.appendChild(sk);
+    const back = el('button', 'btn small', 'เปลี่ยนใจ — อ่านเนื้อหาเลย');
+    back.onclick = () => { ST.pre[l.id] = {skip: true, read: true}; save(); refill(); window.scrollTo(0, 0); };
+    body.appendChild(back);
     return;
   }
   body.appendChild(stepHead(2, 'เรียน', ''));
   const content = el('div', 'content'); renderBlocks(content, l.blocks); body.appendChild(content);
   const qs = postQs(l);
   body.appendChild(stepHead(3, 'Post-test', post ? `ดีที่สุด ${post.best}% · ${post.tries} ครั้ง` : ''));
-  body.appendChild(el('p', 'muted', `${qs.length} ข้อ มีข้อใหม่ที่ไม่เคยเห็น · ต้องได้ ≥ ${PASS_PCT}% · ทำใหม่ได้ ข้อจะสลับทุกครั้ง`));
+  body.appendChild(el('p', 'muted', `${qs.length} ข้อ มีข้อใหม่ที่ไม่เคยเห็น · ต้องได้ ≥ ${passPct()}% · ทำใหม่ได้ ข้อจะสลับทุกครั้ง`));
   body.appendChild(renderTest(shuffledQs(qs), {label: 'ส่ง post-test', onDone: (ok, n, res) => {
     const pct = Math.round(ok / n * 100), prev = ST.post[l.id] || {best: 0, tries: 0, pass: false};
-    ST.post[l.id] = {best: Math.max(prev.best, pct), last: pct, tries: prev.tries + 1, pass: prev.pass || pct >= PASS_PCT, at: Date.now()};
+    ST.post[l.id] = {best: Math.max(prev.best, pct), last: pct, tries: prev.tries + 1, pass: prev.pass || pct >= passPct(), at: Date.now()};
     if (ST.post[l.id].pass) ST.lessons[l.id] = true;
     save(); lessonTags(l, meta);
     const p = ST.pre[l.id];
-    res.className = pct >= PASS_PCT ? 'pass' : 'warn';
-    res.textContent = pct >= PASS_PCT
+    res.className = pct >= passPct() ? 'pass' : 'warn';
+    res.textContent = pct >= passPct()
       ? `ผ่าน ${pct}%` + (p && !p.skip ? ` (pre ${p.pct}% → ${pct}%)` : '') + ' — เข้าใจบทนี้แล้ว'
-      : `ได้ ${pct}% ยังไม่ถึง ${PASS_PCT}% — อ่านคำอธิบายข้อที่ผิด ทบทวนหัวข้อนั้น แล้วทำใหม่`;
+      : `ได้ ${pct}% ยังไม่ถึง ${passPct()}% — อ่านคำอธิบายข้อที่ผิด ทบทวนหัวข้อนั้น แล้วทำใหม่`;
     const row = res.parentNode;
     const again = el('button', 'btn', 'ทำใหม่ (สลับข้อ)'); again.onclick = refill; row.appendChild(again);
-    if (pct >= PASS_PCT) {
+    if (pct >= passPct()) {
       if (PRACTICE_AFTER[l.id]) { const a = el('a', 'btn primary', 'ไปฝึกโจทย์ →'); a.href = '#/practice/' + PRACTICE_AFTER[l.id]; row.appendChild(a); }
       else { const a = el('a', 'btn primary', 'กลับหน้าวันนี้'); a.href = '#/today'; row.appendChild(a); }
     }
@@ -1613,7 +1709,7 @@ function viewPractice(m, kind){
 /* ---------- สอบ ---------- */
 function viewExam(m){
   m.appendChild(el('h1', null, 'ข้อสอบจำลอง'));
-  m.appendChild(el('p', 'muted', 'V1 61 ข้อ · V2 46 ข้อ · ให้คะแนนถ่วงน้ำหนักและเทียบเกณฑ์ระดับ Lead รายทักษะ'));
+  m.appendChild(el('p', 'muted', `V1 61 ข้อ · V2 46 ข้อ · ให้คะแนนถ่วงน้ำหนักและเทียบเกณฑ์ระดับ ${role()} รายทักษะ (เปลี่ยนเป้าหมายได้ที่หน้าวันนี้)`));
   [['final', 'Final — จับเวลาเหมือนสอบจริง', 'นับถอยหลัง หมดเวลาส่งอัตโนมัติ · ปิดแอปแล้วเวลายังเดิน · เตือนเมื่อเหลือ 10/5/1 นาที'],
    ['practice', 'ฝึกซ้อม — ไม่จับเวลา', 'ทำสบาย ๆ ส่งเมื่อพร้อม ดูเฉลยละเอียดหลังส่ง']].forEach(([k, t, d]) => {
     const a = el('a', 'card exam-card'); a.href = 'competency-2026-exam.html#' + k;
