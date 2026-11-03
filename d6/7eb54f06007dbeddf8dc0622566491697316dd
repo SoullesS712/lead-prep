@@ -1,0 +1,33 @@
+competency-2026-exam.html
+  s_a77a31b6d8d954::t_d4febc011bec35 1-1265
+competency-2026-train.html
+  s_a77a31b6d8d954::t_a20998faa095a1 1-1645
+sqljs/sql-wasm.js
+  s_a77a31b6d8d954::t_3bc97436567a8b 1-194
+README.md
+  s_a77a31b6d8d954::t_99d5559a5bf81b 1-7
+icon.svg
+  s_a77a31b6d8d954::t_8fb59bc5df79b5 1
+index.html
+  s_a77a31b6d8d954::t_17773067905c57 1-11
+manifest.webmanifest
+  s_a77a31b6d8d954::t_8856be274b8401 1-9
+sw.js
+  s_a77a31b6d8d954::t_d9e4f041a42edd 1-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.3",
+  "base_commit_sha": "d67eb54f06007dbeddf8dc0622566491697316dd",
+  "prompts": {},
+  "sessions": {
+    "s_a77a31b6d8d954": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "941e6151-45ec-418f-bd70-3b29dd8257e3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "SoullesS712 <sakyasorn62@gmail.com>"
+    }
+  }
+}
