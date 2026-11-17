@@ -1,0 +1,25 @@
+src/core.js
+  s_a77a31b6d8d954::t_c1c708d98dbcd4 66-69
+src/views.js
+  s_a77a31b6d8d954::t_c1c708d98dbcd4 298-300,349,354
+competency-2026-train.html
+  s_a77a31b6d8d954::t_c1c708d98dbcd4 166-169,1665-1668,2280-2282,2331,2336
+src/app.css
+  s_a77a31b6d8d954::t_c1c708d98dbcd4 89-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.3",
+  "base_commit_sha": "df4b292e8f3be9889cf17608643e31caea3cc44d",
+  "prompts": {},
+  "sessions": {
+    "s_a77a31b6d8d954": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "941e6151-45ec-418f-bd70-3b29dd8257e3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "SoullesS712 <sakyasorn62@gmail.com>"
+    }
+  }
+}
