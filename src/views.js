@@ -295,8 +295,9 @@ function viewPractice(m, kind){
   ST.practice = kind; save();
   m.appendChild(el('h1', null, 'ฝึกโจทย์'));
   const seg = el('div', 'seg');
-  [['mcq', `ปรนัย · ${allDrillQs(LESSONS.map(l => l.id)).length}`], ['code', `Coding · ${PROBLEMS.filter(p => ST.prob[p.id]).length}/${PROBLEMS.length}`], ['sql', `SQL · ${SQL_EX.filter((_, i) => ST.sql[i]).length}/${SQL_EX.length}`], ['prompt', `Prompt · ${PROMPT_TASKS.filter(t => ST.prompt[t.id]).length}/${PROMPT_TASKS.length}`]]
-    .forEach(([k, label]) => { const b = el('button', k === kind ? 'on' : '', label); b.onclick = () => nav('/practice/' + k); seg.appendChild(b); });
+  [['mcq', 'ปรนัย', `${allDrillQs(LESSONS.map(l => l.id)).length} ข้อ`], ['code', 'Coding', `${PROBLEMS.filter(p => ST.prob[p.id]).length}/${PROBLEMS.length}`],
+   ['sql', 'SQL', `${SQL_EX.filter((_, i) => ST.sql[i]).length}/${SQL_EX.length}`], ['prompt', 'Prompt', `${PROMPT_TASKS.filter(t => ST.prompt[t.id]).length}/${PROMPT_TASKS.length}`]]
+    .forEach(([k, label, cnt]) => { const b = el('button', k === kind ? 'on' : '', label); b.appendChild(el('small', null, cnt)); b.onclick = () => nav('/practice/' + k); seg.appendChild(b); });
   m.appendChild(seg);
   if (kind === 'mcq') return viewDrill(m);
   const lesson = {code: 'algo', sql: 'sqlt', prompt: 'pc'}[kind], l = lessonById(lesson);
@@ -345,12 +346,12 @@ function viewDrill(m){
   c.appendChild(el('h2', null, 'ตั้งค่าชุดฝึก'));
   c.appendChild(el('div', 'muted', 'บทที่ต้องการ'));
   const chips = el('div', 'row'), picked = new Set(cfg.ids);
-  const allBtn = el('button', 'day wide' + (picked.size === LESSONS.length ? ' on' : ''), 'ทุกบท');
+  const allBtn = el('button', 'chipbtn' + (picked.size === LESSONS.length ? ' on' : ''), picked.size === LESSONS.length ? 'ล้างที่เลือก' : 'เลือกทุกบท');
   allBtn.onclick = () => { if (picked.size === LESSONS.length) picked.clear(); else LESSONS.forEach(l => picked.add(l.id)); cfg.ids = [...picked]; save(); render(); };
   chips.appendChild(allBtn);
   GROUPS.forEach(([, ids]) => ids.forEach(id => {
     const l = lessonById(id); if (!l) return;
-    const b = el('button', 'day wide' + (picked.has(id) ? ' on' : ''), shortTitle(l).slice(0, 24));
+    const b = el('button', 'chipbtn' + (picked.has(id) ? ' on' : ''), CHIP[id] || shortTitle(l));
     b.onclick = () => { picked.has(id) ? picked.delete(id) : picked.add(id); cfg.ids = [...picked]; save(); render(); };
     chips.appendChild(b);
   }));

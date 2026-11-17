@@ -163,7 +163,10 @@ button.choice .ch-top{display:flex;gap:8px;align-items:center;margin-bottom:4px}
 button.choice b{font-size:1.02rem}
 @media (hover:hover){button.choice:hover{border-color:var(--muted)}button.choice.rec:hover{border-color:var(--blue);filter:brightness(1.03)}}
 .in-app .bnav{padding-bottom:0}
-button.day.wide{width:auto;height:auto;min-height:38px;border-radius:999px;padding:6px 14px;font-size:.85rem}
+.chipbtn{font:inherit;font-size:.85rem;cursor:pointer;min-height:36px;padding:6px 14px;border-radius:999px;border:1px solid var(--border);background:var(--bg2);color:var(--muted)}
+.chipbtn.on{border-color:var(--blue);background:var(--accent-soft);color:var(--blue);font-weight:600}
+.seg button small{display:block;font-size:.72rem;font-weight:500;color:var(--muted);margin-top:1px}
+.seg button.on small{color:var(--blue)}
 
 </style>
 </head>
@@ -1659,6 +1662,10 @@ async function copyText(text, btn){
   if (btn) { const o = btn.textContent; btn.textContent = 'คัดลอกแล้ว ✓'; setTimeout(() => btn.textContent = o, 1500); }
 }
 const lessonById = id => LESSONS.find(l => l.id === id);
+// ชื่อสั้นสำหรับปุ่มเลือกบท (ไม่ตัดกลางคำ)
+const CHIP = {algo:'Coding', sqlt:'SQL', pc:'Prompt', sysd:'System Design', db:'Database', micro:'Microservices',
+  fe:'Frontend', api:'Backend & API', oop:'OOP', git:'Git', test:'Testing', mon:'Monitoring', sec:'Security',
+  cont:'Container', cicd:'CI/CD', cloud:'Cloud', ai:'AI'};
 const shortTitle = l => l.title.split(' — ')[0];
 const subTitle = l => l.title.split(' — ')[1] || l.comp;
 
@@ -2270,8 +2277,9 @@ function viewPractice(m, kind){
   ST.practice = kind; save();
   m.appendChild(el('h1', null, 'ฝึกโจทย์'));
   const seg = el('div', 'seg');
-  [['mcq', `ปรนัย · ${allDrillQs(LESSONS.map(l => l.id)).length}`], ['code', `Coding · ${PROBLEMS.filter(p => ST.prob[p.id]).length}/${PROBLEMS.length}`], ['sql', `SQL · ${SQL_EX.filter((_, i) => ST.sql[i]).length}/${SQL_EX.length}`], ['prompt', `Prompt · ${PROMPT_TASKS.filter(t => ST.prompt[t.id]).length}/${PROMPT_TASKS.length}`]]
-    .forEach(([k, label]) => { const b = el('button', k === kind ? 'on' : '', label); b.onclick = () => nav('/practice/' + k); seg.appendChild(b); });
+  [['mcq', 'ปรนัย', `${allDrillQs(LESSONS.map(l => l.id)).length} ข้อ`], ['code', 'Coding', `${PROBLEMS.filter(p => ST.prob[p.id]).length}/${PROBLEMS.length}`],
+   ['sql', 'SQL', `${SQL_EX.filter((_, i) => ST.sql[i]).length}/${SQL_EX.length}`], ['prompt', 'Prompt', `${PROMPT_TASKS.filter(t => ST.prompt[t.id]).length}/${PROMPT_TASKS.length}`]]
+    .forEach(([k, label, cnt]) => { const b = el('button', k === kind ? 'on' : '', label); b.appendChild(el('small', null, cnt)); b.onclick = () => nav('/practice/' + k); seg.appendChild(b); });
   m.appendChild(seg);
   if (kind === 'mcq') return viewDrill(m);
   const lesson = {code: 'algo', sql: 'sqlt', prompt: 'pc'}[kind], l = lessonById(lesson);
@@ -2320,12 +2328,12 @@ function viewDrill(m){
   c.appendChild(el('h2', null, 'ตั้งค่าชุดฝึก'));
   c.appendChild(el('div', 'muted', 'บทที่ต้องการ'));
   const chips = el('div', 'row'), picked = new Set(cfg.ids);
-  const allBtn = el('button', 'day wide' + (picked.size === LESSONS.length ? ' on' : ''), 'ทุกบท');
+  const allBtn = el('button', 'chipbtn' + (picked.size === LESSONS.length ? ' on' : ''), picked.size === LESSONS.length ? 'ล้างที่เลือก' : 'เลือกทุกบท');
   allBtn.onclick = () => { if (picked.size === LESSONS.length) picked.clear(); else LESSONS.forEach(l => picked.add(l.id)); cfg.ids = [...picked]; save(); render(); };
   chips.appendChild(allBtn);
   GROUPS.forEach(([, ids]) => ids.forEach(id => {
     const l = lessonById(id); if (!l) return;
-    const b = el('button', 'day wide' + (picked.has(id) ? ' on' : ''), shortTitle(l).slice(0, 24));
+    const b = el('button', 'chipbtn' + (picked.has(id) ? ' on' : ''), CHIP[id] || shortTitle(l));
     b.onclick = () => { picked.has(id) ? picked.delete(id) : picked.add(id); cfg.ids = [...picked]; save(); render(); };
     chips.appendChild(b);
   }));

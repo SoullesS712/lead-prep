@@ -63,6 +63,10 @@ async function copyText(text, btn){
   if (btn) { const o = btn.textContent; btn.textContent = 'คัดลอกแล้ว ✓'; setTimeout(() => btn.textContent = o, 1500); }
 }
 const lessonById = id => LESSONS.find(l => l.id === id);
+// ชื่อสั้นสำหรับปุ่มเลือกบท (ไม่ตัดกลางคำ)
+const CHIP = {algo:'Coding', sqlt:'SQL', pc:'Prompt', sysd:'System Design', db:'Database', micro:'Microservices',
+  fe:'Frontend', api:'Backend & API', oop:'OOP', git:'Git', test:'Testing', mon:'Monitoring', sec:'Security',
+  cont:'Container', cicd:'CI/CD', cloud:'Cloud', ai:'AI'};
 const shortTitle = l => l.title.split(' — ')[0];
 const subTitle = l => l.title.split(' — ')[1] || l.comp;
 
