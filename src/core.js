@@ -26,7 +26,7 @@ const LV = {B:'Beginner',I:'Intermediate',A:'Advance'};
 const KEY = 'comp2026-lead-training-v1', HIST_KEY = 'comp2026-exam-history';
 function ymd(d){ return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function parseYmd(s){ const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
-const freshState = () => ({lessons:{}, quiz:{}, pre:{}, post:{}, units:{}, prob:{}, sql:{}, prompt:{}, code:{}, practice:'code', target:{role:'Lead', pass:80},
+const freshState = () => ({lessons:{}, quiz:{}, pre:{}, post:{}, units:{}, prob:{}, sql:{}, prompt:{}, code:{}, practice:'mcq', target:{role:'Lead', pass:80},
   sched:{examDate:'2026-11-23', time:'20:00', days:[0,1,2,3,4,5,6], start:ymd(new Date()), units:null}});
 let ST = freshState();
 try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) { ST = Object.assign(ST, s); ST.sched = Object.assign(freshState().sched, s.sched || {}); ST.target = Object.assign({role:'Lead', pass:80}, s.target || {}); ['pre','post','units'].forEach(k => ST[k] = ST[k] || {}); } } catch (e) {}
@@ -76,8 +76,10 @@ const UNITS = [
   {id:'u1', t:'วัดระดับก่อนเรียน — สอบ V2 แบบ Final', h:2, manual:true, exam:true},
   {id:'u2', t:'Program Coding I — วิธีคิด + โจทย์ 1–6', h:3, lessons:['algo'], probs:rng(0, 5)},
   {id:'u3', t:'Program Coding II — โจทย์ 7–12 (Advance)', h:3, probs:rng(6, 11)},
+  {id:'u3b', t:'Program Coding III — โจทย์ 13–21 (heap, LIS, deque)', h:3, probs:rng(12, 20)},
   {id:'u4', t:'SQL — บทเรียน + SQL Lab 1–5', h:2.5, lessons:['sqlt'], sql:rng(0, 4)},
   {id:'u5', t:'SQL Lab 6–10 (window, CTE, recursive)', h:2, sql:rng(5, 9)},
+  {id:'u5b', t:'SQL Lab 11–20 (pivot, LAG, RANK, self join)', h:2, sql:rng(10, 19)},
   {id:'u6', t:'System Design', h:1.5, lessons:['sysd']},
   {id:'u7', t:'Database Design', h:1.5, lessons:['db']},
   {id:'u8', t:'Frontend', h:1.5, lessons:['fe']},

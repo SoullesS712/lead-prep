@@ -28,7 +28,7 @@ global.AppBridge={postMessage:m=>bridgeMsgs.push(JSON.parse(m))};
 const txt=()=>ids.main.textContent;
 const btn=(root,re)=>find(root,n=>n.tagName==='button'&&re.test(n.textContent))[0];
 (async()=>{
- const A=new Function(src.replace("render();\nif (IN_APP)","/*boot*/render();\nif (IN_APP)")+';return {get ST(){return ST},render,LESSONS,POST,UNITS,buildPlan,unitDone,PROBLEMS,SQL_EX,PROMPT_TASKS};')();
+ const A=new Function(src.replace("render();\nif (IN_APP)","/*boot*/render();\nif (IN_APP)")+';return {get ST(){return ST},render,LESSONS,POST,BANK,UNITS,buildPlan,unitDone,PROBLEMS,SQL_EX,PROMPT_TASKS};')();
  const sched=bridgeMsgs.find(m=>m.type==='schedule');
  console.log('boot: nav',ids.nav.children.length,'chip',ids.countChip.textContent,'| schedule msg items',sched&&sched.items.length);
  console.log('  first notif:',new Date(sched.items[0].at).toString().slice(0,21),'|',sched.items[0].title,'|',sched.items[0].body,'|',sched.items[0].hash);
@@ -90,5 +90,20 @@ const btn=(root,re)=>find(root,n=>n.tagName==='button'&&re.test(n.textContent))[
  btn(dlg,/ยกเลิก/).onclick(); await new Promise(r=>setTimeout(r,0)); console.log('after cancel post kept:',!!A.ST.post.sysd);
  btn(ids.main,/ล้างความคืบหน้า/).onclick(); dlg=BODY.children.at(-1); btn(dlg,/ล้างข้อมูล/).onclick(); await new Promise(r=>setTimeout(r,0));
  console.log('after confirm post cleared:',!A.ST.post.sysd,'| target kept',JSON.stringify(A.ST.target),'| sched kept',A.ST.sched.examDate);
+ // ---- ฝึกปรนัย ----
+ location.hash='/practice/mcq';
+ const segD=find(ids.main,n=>n._c.has('seg'))[0];
+ console.log('drill tab:',segD.children.map(b=>b.textContent).join(' | '));
+ btn(ids.main,/^เริ่มฝึก/).onclick();
+ const dq=find(ids.main,n=>n._c.has('q'));
+ console.log('drill questions shown:',dq.length);
+ // ตอบ: 5 ข้อแรกผิด ที่เหลือถูก (หาเฉลยจากคลังด้วยข้อความคำถาม)
+ const lib=A.LESSONS.flatMap(l=>l.quiz.concat(A.POST[l.id]||[],A.BANK[l.id]||[]));
+ dq.forEach((q,i)=>{const qt=q.children[0].textContent.replace(/^\d+\. /,'');const src=lib.find(x=>x.q===qt);const bs=find(q,n=>n._c.has('opt'));const right=bs.findIndex(b=>b.textContent.slice(3)===src.o[src.a]);bs[i<5?(right+1)%bs.length:right].onclick();});
+ btn(ids.main,/ส่งคำตอบ/).onclick();
+ console.log('drill result:',find(ids.main,n=>/ได้ \d+\/\d+ \(/.test(n._text||''))[0]?._text,'| wrong saved',Object.keys(A.ST.wrongQs).length,'| stats topics',Object.keys(A.ST.drill).length);
+ btn(ids.main,/ทำชุดใหม่/).onclick();
+ btn(find(ids.main,n=>n._c.has('seg'))[2],/เคยตอบผิด/).onclick();
+ console.log('wrong-only mode start button:',btn(ids.main,/^เริ่มฝึก/)?.textContent,'| weak list rows',find(ids.main,n=>n._c.has('item')&&/ตอบไป/.test(n.textContent)).length);
  const B=new Function(src.replace(/render\(\);\nif \(IN_APP\) sendSchedule\(\);/,'')+';return {get ST(){return ST}};')(); console.log('persist: post',JSON.stringify(B.ST.post.sysd),'prob',Object.keys(B.ST.prob).join(','));
 })().catch(e=>console.error('ERR',e.stack)).finally(()=>process.exit(0));

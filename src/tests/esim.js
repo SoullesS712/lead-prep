@@ -1,6 +1,6 @@
 // ทดสอบโหมด Final/ฝึกซ้อม: rules dialog, จับเวลา, เตือน, บันทึก/ทำต่อ, หมดเวลาส่งอัตโนมัติ, ประวัติ
 const fs=require('fs');
-const h=fs.readFileSync('D:/new/competency-2026-exam.html','utf8');
+const h=fs.readFileSync('D:/new/lead-prep-site/competency-2026-exam.html','utf8');
 const src=h.slice(h.indexOf('<script>')+8,h.lastIndexOf('</script>'));
 class CL{constructor(e){this.e=e}add(...c){c.forEach(x=>this.e._c.add(x))}remove(...c){c.forEach(x=>this.e._c.delete(x))}toggle(c,on){on===undefined?(this.e._c.has(c)?this.e._c.delete(c):this.e._c.add(c)):(on?this.e._c.add(c):this.e._c.delete(c))}contains(c){return this.e._c.has(c)}}
 class El{constructor(tag){this.tagName=tag;this.children=[];this._c=new Set();this.classList=new CL(this);this.style={};this._text='';this.value='';this.dataset={}}

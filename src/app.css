@@ -86,3 +86,4 @@ button.choice .ch-top{display:flex;gap:8px;align-items:center;margin-bottom:4px}
 button.choice b{font-size:1.02rem}
 @media (hover:hover){button.choice:hover{border-color:var(--muted)}button.choice.rec:hover{border-color:var(--blue);filter:brightness(1.03)}}
 .in-app .bnav{padding-bottom:0}
+button.day.wide{width:auto;height:auto;min-height:38px;border-radius:999px;padding:6px 14px;font-size:.85rem}

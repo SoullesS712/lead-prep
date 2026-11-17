@@ -163,6 +163,7 @@ button.choice .ch-top{display:flex;gap:8px;align-items:center;margin-bottom:4px}
 button.choice b{font-size:1.02rem}
 @media (hover:hover){button.choice:hover{border-color:var(--muted)}button.choice.rec:hover{border-color:var(--blue);filter:brightness(1.03)}}
 .in-app .bnav{padding-bottom:0}
+button.day.wide{width:auto;height:auto;min-height:38px;border-radius:999px;padding:6px 14px;font-size:.85rem}
 
 </style>
 </head>
@@ -824,6 +825,383 @@ const GEN = {
   }
 };
 
+/* ================= เนื้อหาเจาะลึก — แทรกก่อน "กับดักในข้อสอบ" ของแต่ละบท =================
+   แต่ละบทมี: โจทย์สถานการณ์ + วิธีคิดทีละขั้น, ตารางเทียบที่ออกบ่อย, ตัวอย่างโค้ด/การใช้จริง */
+const EXTRA = {
+sysd:[
+ {h:'เจาะลึก: ฝึกคิดกับโจทย์จริง — ระบบจองตั๋วคอนเสิร์ต'},
+ {p:'โจทย์: ขายตั๋ว 50,000 ใบ เปิดขายพร้อมกัน มีคนเข้าพร้อมกัน 500,000 คน ห้ามขายเกิน และหน้าเว็บต้องไม่ล่ม'},
+ {ol:['<b>Requirements</b>: ห้าม oversell (consistency สำคัญที่สุด), รองรับ burst สูงมากในช่วงสั้น, ผู้ใช้ยอมรอคิวได้','<b>Estimate</b>: 500k คนใน 1–2 นาที ≈ 5,000–10,000 req/วินาที แต่ตั๋วมีแค่ 50k → คนส่วนใหญ่จะไม่ได้ตั๋ว','<b>ลดโหลดที่ทางเข้า</b>: virtual waiting room (queue) ปล่อยคนเข้าเป็นรอบ ๆ + rate limit ต่อผู้ใช้ + CDN สำหรับหน้า static','<b>กันขายเกิน</b>: ตัดสต็อกแบบ atomic (UPDATE … WHERE remaining > 0 หรือ Redis DECR) และ "จองชั่วคราว" (hold) 10 นาที ถ้าไม่จ่ายคืนสต็อก','<b>ชำระเงิน</b>: async ผ่าน queue + idempotency key กันตัดเงินซ้ำ แจ้งผลด้วย webhook','<b>ความทนทาน</b>: ถ้า payment ล่ม ให้ hold ยังอยู่และ retry ได้ ไม่ทำให้ระบบจองล่มตาม (circuit breaker)']},
+ {h:'เลือก consistency ให้ถูกส่วน'},
+ {table:[['ข้อมูล','ต้องการ','เหตุผล'],['จำนวนตั๋วคงเหลือ / ยอดเงิน','Strong consistency','ผิดแล้วเสียเงิน/ขายเกิน'],['จำนวนคนรอคิว, ยอดวิว','Eventual consistency','คลาดเล็กน้อยไม่กระทบ'],['ประวัติการสั่งซื้อของผู้ใช้','Read-your-writes','ผู้ใช้ต้องเห็นสิ่งที่ตัวเองเพิ่งทำ'],['รายงานยอดขายรายวัน','Eventual (batch/CQRS)','อ่านจาก read model ได้']]},
+ {h:'Back-of-the-envelope ที่ควรจำ'},
+ {ul:['1 วัน ≈ 86,400 วินาที → 1 ล้าน request/วัน ≈ 12 req/วินาที (เฉลี่ย) ช่วงพีคมักคูณ 3–10','อ่าน memory ~100 ns, SSD ~100 µs, network ใน data center ~0.5 ms, ข้ามทวีป ~150 ms','availability 99.9% = ล่มได้ ~43 นาที/เดือน, 99.99% ≈ 4.3 นาที/เดือน','ข้อมูล 1 KB × 1 ล้านแถว ≈ 1 GB (ยังไม่รวม index)']}
+],
+db:[
+ {h:'เจาะลึก: อ่าน execution plan ให้เป็น'},
+ {table:[['สิ่งที่เห็นใน plan','ความหมาย','สิ่งที่ควรทำ'],['Table Scan / Clustered Index Scan บนตารางใหญ่','อ่านทุกแถว','หา index ที่ตรงกับ WHERE/JOIN'],['Index Seek + Key Lookup จำนวนมาก','เจอแถวด้วย index แต่ต้องย้อนไปอ่านคอลัมน์อื่น','covering index (INCLUDE คอลัมน์ที่ SELECT)'],['Estimated rows ต่างจาก Actual มาก','สถิติเก่าหรือ parameter sniffing','UPDATE STATISTICS / ปรับ query'],['Sort / Hash Match กิน cost สูง','เรียงหรือ join ข้อมูลมาก','index ที่เรียงตาม ORDER BY/JOIN อยู่แล้ว'],['Implicit conversion','ชนิดข้อมูลไม่ตรง (nvarchar vs varchar)','ใช้ชนิดเดียวกับคอลัมน์']]},
+ {h:'ตัวอย่าง: ออกแบบ schema ระบบ e-commerce ให้ผ่าน 3NF'},
+ {code:`customers(id PK, name, email UNIQUE, phone)
+products(id PK, sku UNIQUE, name, category_id FK, price)
+categories(id PK, name)
+orders(id PK, customer_id FK, status, created_at, total)      -- total เก็บซ้ำได้ (denormalize) เพื่อรายงานเร็ว
+order_items(order_id FK, product_id FK, qty, unit_price,    -- unit_price = ราคา ณ วันซื้อ ไม่ใช่ราคาปัจจุบัน
+            PRIMARY KEY (order_id, product_id))
+-- index ที่ควรมี: orders(customer_id, created_at), order_items(product_id), products(category_id)`},
+ {p:'จุดที่ข้อสอบชอบถาม: <b>unit_price ใน order_items ไม่ใช่การซ้ำซ้อนผิด 3NF</b> เพราะเป็นข้อเท็จจริง ณ เวลาซื้อ (ราคาสินค้าเปลี่ยนได้ภายหลัง) และ FK ต้องสร้าง index เองเพื่อให้ JOIN/DELETE เร็ว'},
+ {h:'Isolation level เทียบกันในตารางเดียว'},
+ {table:[['Level','Dirty read','Non-repeatable','Phantom','ใช้เมื่อ'],['READ UNCOMMITTED','เกิดได้','เกิดได้','เกิดได้','รายงานคร่าว ๆ ที่ยอมผิดได้'],['READ COMMITTED (ค่าเริ่มต้น SQL Server)','กันได้','เกิดได้','เกิดได้','งานทั่วไป'],['REPEATABLE READ','กันได้','กันได้','เกิดได้','อ่านซ้ำต้องได้ค่าเดิม'],['SERIALIZABLE','กันได้','กันได้','กันได้','ต้องถูกต้องสูงสุด แลกกับ lock มาก'],['SNAPSHOT','กันได้','กันได้','กันได้','อ่านไม่บล็อกเขียน (ใช้ row versioning)']]}
+],
+micro:[
+ {h:'เจาะลึก: Saga แบบ choreography vs orchestration'},
+ {table:[['','Choreography','Orchestration'],['การควบคุม','แต่ละ service ฟัง event แล้วทำต่อเอง','มี orchestrator สั่งทีละขั้น'],['เหมาะกับ','flow สั้น 2–3 ขั้น','flow ยาว มีเงื่อนไขซับซ้อน'],['ข้อดี','ไม่มีศูนย์กลาง coupling ต่ำ','เห็น flow ที่เดียว debug ง่าย'],['ข้อเสีย','flow กระจาย ตามยาก วนกันได้','orchestrator อาจกลายเป็นจุดรวม logic']]},
+ {p:'ตัวอย่าง flow สั่งซื้อ: <b>Order(PENDING)</b> → Payment ตัดเงิน → Inventory ตัดสต็อก → Order(CONFIRMED) ถ้า Inventory ไม่พอ ให้ส่ง event "StockFailed" → Payment <b>คืนเงิน</b> (compensating) → Order(CANCELLED) — ทุกขั้นต้อง idempotent เพราะ event อาจมาซ้ำ'},
+ {h:'Transactional Outbox ในโค้ด'},
+ {code:`// 1) ในฐานข้อมูลเดียวกัน transaction เดียว
+await using var tx = await db.Database.BeginTransactionAsync();
+order.Status = "PAID";
+db.Outbox.Add(new OutboxMessage { Id = Guid.NewGuid(), Type = "OrderPaid",
+                                  Payload = JsonSerializer.Serialize(new { order.Id }) });
+await db.SaveChangesAsync();
+await tx.CommitAsync();
+// 2) Background worker อ่าน Outbox ที่ยังไม่ส่ง → publish ไป broker → ทำเครื่องหมายว่าส่งแล้ว
+//    (ส่งซ้ำได้ ผู้รับต้อง idempotent ด้วย message Id)`},
+ {h:'Resilience patterns สรุปรวม'},
+ {table:[['Pattern','แก้ปัญหา','ค่าที่ต้องตั้ง'],['Timeout','รอนานไม่จบ','ต่ำกว่า timeout ของผู้เรียกเสมอ'],['Retry + backoff + jitter','ล้มชั่วคราว','จำนวนครั้ง, ฐานเวลา, ใช้กับ operation ที่ idempotent'],['Circuit breaker','ปลายทางป่วยต่อเนื่อง','threshold, ระยะ open, half-open trial'],['Bulkhead','ปลายทางหนึ่งกิน resource หมด','ขนาด pool ต่อปลายทาง'],['Fallback','ต้องตอบอะไรสักอย่าง','ค่า cache/ค่าเริ่มต้นที่ปลอดภัย']]}
+],
+git:[
+ {h:'เจาะลึก: เลือก branching strategy'},
+ {table:[['Strategy','branch หลัก','เหมาะกับ','ข้อควรระวัง'],['Git Flow','main, develop, feature/*, release/*, hotfix/*','release เป็นรอบ มีหลายเวอร์ชันต้องดูแล','branch อายุยาว merge ยาก'],['GitHub Flow','main + feature branch สั้น ๆ','deploy ต่อเนื่อง เว็บ/บริการเดียว','main ต้อง deploy ได้เสมอ'],['Trunk-based','main (trunk) + branch อายุ ≤ 1–2 วัน','ทีมที่ deploy วันละหลายครั้ง','ต้องมี feature flag และ CI ที่ดี']]},
+ {h:'สถานการณ์กู้คืนที่ต้องตอบได้'},
+ {table:[['สถานการณ์','คำสั่งที่เหมาะ','หมายเหตุ'],['commit ผิดยังไม่ push','git reset --soft HEAD~1 แล้วแก้ใหม่','ไม่กระทบคนอื่น'],['commit ผิดและ push ขึ้น main แล้ว','git revert <sha>','ไม่เขียนประวัติที่แชร์ใหม่'],['เผลอ reset --hard','git reflog แล้ว git reset --hard <sha>','reflog เก็บประวัติ HEAD ในเครื่อง'],['ต้องการ commit เดียวจากอีก branch','git cherry-pick <sha>','อาจ conflict ต้องแก้'],['หาว่า commit ไหนทำพัง','git bisect start/good/bad หรือ bisect run','binary search'],['ไฟล์ secret ถูก push','rotate secret ก่อน แล้วค่อยล้างประวัติ','ถือว่ารั่วแล้วเสมอ']]},
+ {h:'merge vs rebase vs squash'},
+ {ul:['<b>merge</b>: เก็บประวัติจริงทั้งหมด มี merge commit — ปลอดภัยกับ branch ที่แชร์','<b>rebase</b>: ย้าย commit ไปต่อท้าย ได้ประวัติเส้นตรง — ใช้กับ branch ส่วนตัวที่ยังไม่แชร์เท่านั้น','<b>squash merge</b>: รวมทั้ง PR เป็น commit เดียวบน main — ประวัติ main สะอาด แต่เสียรายละเอียด commit ย่อย']}
+],
+oop:[
+ {h:'เจาะลึก: refactor ทีละขั้นด้วย SOLID'},
+ {p:'โค้ดเริ่มต้น: <code>OrderService.Checkout()</code> คำนวณส่วนลดด้วย switch, บันทึกด้วย new SqlRepository(), ส่งอีเมลด้วย new SmtpClient() — test ยาก แก้ทีพังหลายที่'},
+ {code:`// หลัง refactor
+public interface IDiscountPolicy { bool AppliesTo(Customer c); decimal Apply(decimal total); }   // OCP: เพิ่ม policy ใหม่ไม่แก้ของเดิม
+public interface IOrderRepository { Task SaveAsync(Order o); }                                  // DIP
+public interface INotifier { Task OrderPlacedAsync(Order o); }                                   // ISP: interface เล็ก ตรงงาน
+
+public class CheckoutService                                                                      // SRP: ประสานงานอย่างเดียว
+{
+    private readonly IEnumerable<IDiscountPolicy> _policies;
+    private readonly IOrderRepository _repo;
+    private readonly INotifier _notifier;
+    public CheckoutService(IEnumerable<IDiscountPolicy> p, IOrderRepository r, INotifier n)
+        => (_policies, _repo, _notifier) = (p, r, n);
+
+    public async Task<Order> CheckoutAsync(Customer c, Cart cart)
+    {
+        var total = cart.Total;
+        foreach (var p in _policies.Where(p => p.AppliesTo(c))) total = p.Apply(total);
+        var order = Order.Create(c.Id, cart.Items, total);   // กฎของ Order อยู่ใน Order (encapsulation)
+        await _repo.SaveAsync(order);
+        await _notifier.OrderPlacedAsync(order);
+        return order;
+    }
+}`},
+ {h:'Design patterns ที่ออกสอบบ่อย — จำจาก "ปัญหา"'},
+ {table:[['ปัญหา','Pattern'],['เลือกอัลกอริทึมได้หลายแบบตอน runtime','Strategy'],['เพิ่มความสามารถ (cache/log/retry) โดยไม่แก้ class เดิม','Decorator'],['ใช้ library ที่ interface ไม่ตรงกับของเรา','Adapter'],['สร้าง object ต่างชนิดโดยผู้เรียกไม่ต้องรู้ class จริง','Factory'],['แจ้งหลายผู้รับเมื่อ state เปลี่ยน','Observer (event)'],['object มีพารามิเตอร์ทางเลือกเยอะ','Builder'],['ซ่อนระบบย่อยซับซ้อนไว้หลัง interface ง่าย ๆ','Facade'],['ขั้นตอนหลักเหมือนกัน ต่างกันบางขั้น','Template Method']]},
+ {h:'Composition over inheritance'},
+ {p:'ใช้ inheritance เมื่อเป็นความสัมพันธ์ "is-a" จริงและแทนกันได้ตาม LSP ถ้าแค่อยากใช้โค้ดซ้ำหรือผสมความสามารถหลายแบบ ให้ใช้ composition (ถือ object ที่ทำงานนั้นไว้) — ลด class explosion และเปลี่ยนพฤติกรรมได้ตอน runtime'}
+],
+test:[
+ {h:'เจาะลึก: เขียน unit test ที่ดีด้วย xUnit + Moq'},
+ {code:`public class CheckoutServiceTests
+{
+    [Theory]
+    [InlineData(1000, 900)]     // สมาชิก VIP ลด 10%
+    [InlineData(0, 0)]          // กรณีขอบ: ตะกร้าว่าง
+    public async Task Vip_gets_10_percent_off(decimal cartTotal, decimal expected)
+    {
+        // Arrange
+        var repo = new Mock<IOrderRepository>();
+        var notifier = new Mock<INotifier>();
+        var sut = new CheckoutService(new[] { new VipDiscount() }, repo.Object, notifier.Object);
+        var vip = new Customer { Id = 1, IsVip = true };
+
+        // Act
+        var order = await sut.CheckoutAsync(vip, Cart.WithTotal(cartTotal));
+
+        // Assert
+        Assert.Equal(expected, order.Total);
+        repo.Verify(r => r.SaveAsync(It.Is<Order>(o => o.Total == expected)), Times.Once);
+        notifier.Verify(n => n.OrderPlacedAsync(It.IsAny<Order>()), Times.Once);
+    }
+}`},
+ {h:'Test double — เลือกให้ถูก'},
+ {table:[['ชนิด','ทำอะไร','ใช้เมื่อ'],['Dummy','ส่งไปให้ครบพารามิเตอร์ ไม่ถูกใช้','constructor ต้องการแต่ test ไม่เกี่ยว'],['Stub','คืนค่าที่กำหนดไว้','ควบคุม input จาก dependency'],['Fake','ทำงานได้จริงแบบเบา (in-memory repo)','ต้องการพฤติกรรมใกล้ของจริง'],['Spy','จดว่าถูกเรียกอย่างไร','ตรวจภายหลังแบบยืดหยุ่น'],['Mock','ตั้งความคาดหวังและ verify interaction','ต้องยืนยันว่ามีการเรียก (Times.Once)']]},
+ {h:'ตั้งชื่อ test ให้อ่านแล้วรู้ว่าพังเพราะอะไร'},
+ {ul:['รูปแบบ <code>Method_Condition_ExpectedResult</code> เช่น <code>Withdraw_InsufficientBalance_ThrowsDomainException</code>','หนึ่ง test ตรวจหนึ่งพฤติกรรม — assert หลายตัวได้ถ้าเป็นผลของพฤติกรรมเดียวกัน','test ต้อง deterministic: ไม่พึ่งเวลาจริง ลำดับการรัน หรือ network']}
+],
+mon:[
+ {h:'เจาะลึก: ตั้ง SLO และ alert ให้ทีมไม่ล้า'},
+ {ol:['เลือก <b>SLI</b> ที่สะท้อนผู้ใช้: สัดส่วน request ที่สำเร็จ และสัดส่วนที่ตอบภายใน 300 ms','ตั้ง <b>SLO</b>: เช่น 99.9% ของ request ใน 30 วันต้องสำเร็จ → error budget 0.1% ≈ 43 นาที','<b>Burn-rate alert</b>: ปลุกคนเมื่อใช้ budget เร็ว (เช่นใช้ 2% ใน 1 ชั่วโมง) ส่วนที่ช้ากว่านั้นเปิด ticket','<b>Error budget policy</b>: budget ใกล้หมด → หยุดปล่อยฟีเจอร์เสี่ยง ทำงาน reliability ก่อน']},
+ {h:'Structured logging ใน ASP.NET Core (Serilog)'},
+ {code:`Log.Information("Order {OrderId} paid by {CustomerId} amount {Amount}", order.Id, c.Id, total);
+// ได้ JSON ที่ค้นได้: {"OrderId":1043,"CustomerId":7,"Amount":1250,"TraceId":"4bf92f…","Level":"Information"}
+// ห้าม: Log.Information($"Order {order.Id} paid ... card {cardNumber}")  ← string interpolation ค้นยาก และรั่ว PII`},
+ {h:'Three pillars + เมื่อใช้อะไร'},
+ {table:[['สัญญาณ','ตอบคำถาม','ตัวอย่างเครื่องมือ'],['Metrics','ระบบโดยรวมปกติไหม เกิดบ่อยแค่ไหน','Prometheus, Azure Monitor'],['Logs','เกิดอะไรขึ้นกับ request/เหตุการณ์นี้','Elasticsearch, Loki, Log Analytics'],['Traces','ช้าที่ service/hop ไหน','OpenTelemetry + Jaeger, App Insights']]}
+],
+fe:[
+ {h:'เจาะลึก: ไล่แก้หน้าเว็บช้าตาม Core Web Vitals'},
+ {table:[['อาการ','วัดด้วย','สาเหตุที่พบบ่อย','วิธีแก้'],['เนื้อหาหลักขึ้นช้า','LCP > 2.5 s','รูป hero ใหญ่, render-blocking CSS/JS, server ช้า','รูปขนาดพอดี WebP/AVIF + preload, SSR/SSG, CDN'],['กดแล้วตอบสนองช้า','INP > 200 ms','JS งานยาวบน main thread, re-render ทั้งหน้า','แบ่งงาน (yield), Web Worker, memo, code splitting'],['หน้ากระตุก/เลื่อน','CLS > 0.1','รูป/โฆษณาไม่จองพื้นที่, font สลับ','กำหนด width/height/aspect-ratio, font-display']]},
+ {h:'Rendering strategy — ตัดสินใจจากคำถาม 3 ข้อ'},
+ {ol:['ต้องติด SEO หรือแชร์ลิงก์แล้วต้องมี preview ไหม? ถ้าใช่ → SSR/SSG/ISR','ข้อมูลเปลี่ยนบ่อยแค่ไหน? นาน ๆ ครั้ง → SSG/ISR, ทุก request ต่างกัน → SSR','หลัง login และโต้ตอบมาก? → CSR (SPA) ได้ ไม่ต้องห่วง SEO']},
+ {h:'Security ฝั่ง frontend ที่ Lead ต้องรู้'},
+ {ul:['ไม่ใช้ <code>dangerouslySetInnerHTML</code>/<code>innerHTML</code> กับข้อมูลผู้ใช้ ถ้าจำเป็นต้อง sanitize (DOMPurify)','เก็บ token ใน HttpOnly cookie หรือผ่าน BFF แทน localStorage','ตั้ง Content-Security-Policy จำกัดแหล่ง script','อย่าใส่ secret ใน bundle — ทุกอย่างใน JS ฝั่ง client อ่านได้']}
+],
+api:[
+ {h:'เจาะลึก: ออกแบบ API ชำระเงินที่ส่งซ้ำได้อย่างปลอดภัย'},
+ {code:`POST /payments
+Idempotency-Key: 6f1c-…-a92e          ← client สร้าง UUID หนึ่งครั้งต่อการกดจ่าย
+{ "orderId": 1043, "amount": 1250.00 }
+
+// Server
+if (await store.TryGetAsync(key, out var saved)) return saved.Response;   // เคยทำแล้ว → ตอบผลเดิม
+var result = await gateway.ChargeAsync(...);
+await store.SaveAsync(key, requestHash, result, ttl: TimeSpan.FromHours(24));
+return Created($"/payments/{result.Id}", result);                          // 201 + Location`},
+ {p:'ถ้า key เดิมแต่ body ต่างกัน ให้ตอบ <b>422/409</b> เพราะเป็นการใช้ key ผิด ไม่ใช่การ retry'},
+ {h:'Status code ที่ต้องแยกให้ออก'},
+ {table:[['Code','ใช้เมื่อ'],['200 OK','สำเร็จและมี body'],['201 Created','สร้างใหม่สำเร็จ + Location'],['202 Accepted','รับงานไว้ทำแบบ async + URL ดูสถานะ'],['204 No Content','สำเร็จไม่มี body (เช่น DELETE)'],['400 Bad Request','รูปแบบ request ผิด'],['401 Unauthorized','ยังไม่ยืนยันตัวตน/token หมดอายุ'],['403 Forbidden','รู้ว่าเป็นใครแต่ไม่มีสิทธิ์'],['404 Not Found','ไม่มี resource (หรือซ่อนว่ามีจากคนไม่มีสิทธิ์)'],['409 Conflict','ชนกับสถานะปัจจุบัน (เช่น version ไม่ตรง)'],['412 Precondition Failed','If-Match ไม่ตรง ETag'],['422 Unprocessable Entity','รูปแบบถูกแต่ผิดกฎทางธุรกิจ'],['429 Too Many Requests','เกินโควตา + Retry-After'],['503 Service Unavailable','ชั่วคราวให้บริการไม่ได้ + Retry-After']]},
+ {h:'REST vs GraphQL vs gRPC'},
+ {table:[['','REST','GraphQL','gRPC'],['เหมาะกับ','public API, CRUD, cache ผ่าน HTTP','frontend ที่ต้องการข้อมูลหลายรูปแบบ','service-to-service ประสิทธิภาพสูง'],['จุดแข็ง','เรียบง่าย cache ได้ดี','client เลือก field เอง ลด over/under-fetching','binary, streaming, contract ชัด'],['ระวัง','over/under-fetching','N+1 (ใช้ DataLoader), cache ยาก','เบราว์เซอร์เรียกตรงยาก']]}
+],
+sec:[
+ {h:'เจาะลึก: OWASP Top 10 (2021) กับตัวอย่างใน .NET'},
+ {table:[['ความเสี่ยง','ตัวอย่าง','ป้องกัน'],['A01 Broken Access Control','เปลี่ยน id ใน URL แล้วเห็นข้อมูลคนอื่น','ตรวจ owner/role ฝั่ง server ทุกครั้ง, deny by default'],['A02 Cryptographic Failures','เก็บรหัสผ่านด้วย MD5, ส่งข้อมูลผ่าน HTTP','bcrypt/Argon2, TLS ทุกที่, เข้ารหัสข้อมูลอ่อนไหว'],['A03 Injection','ต่อ string เป็น SQL/command','parameterized query, ORM, validate input'],['A04 Insecure Design','ไม่มี rate limit ที่หน้า OTP','threat modeling ตั้งแต่ออกแบบ'],['A05 Security Misconfiguration','เปิด stack trace/Swagger บน prod','hardening, ปิดของที่ไม่ใช้'],['A06 Vulnerable Components','ใช้ library ที่มี CVE','SCA ใน pipeline, อัปเดตสม่ำเสมอ'],['A07 Auth Failures','ไม่มี lockout, session ไม่หมดอายุ','MFA, lockout, token อายุสั้น'],['A08 Integrity Failures','deserialize ข้อมูลไม่น่าเชื่อถือ, CI ไม่ verify','ลงลายเซ็น artifact, จำกัด type'],['A09 Logging Failures','ไม่ log การ login ล้มเหลว','log เหตุการณ์ความปลอดภัย + alert'],['A10 SSRF','server ดึง URL ที่ผู้ใช้ส่งมา','allowlist ปลายทาง, บล็อก IP ภายใน/metadata']]},
+ {h:'ตรวจสิทธิ์ระดับ object ใน ASP.NET Core'},
+ {code:`[Authorize]
+[HttpGet("/api/orders/{id:int}")]
+public async Task<IActionResult> Get(int id)
+{
+    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var order = await db.Orders.SingleOrDefaultAsync(o => o.Id == id && o.CustomerId == userId);
+    return order is null ? NotFound() : Ok(OrderDto.From(order));   // ไม่บอกว่ามี order ของคนอื่นอยู่
+}`},
+ {h:'Authentication vs Authorization'},
+ {ul:['<b>Authentication</b> = คุณคือใคร (login, OIDC, MFA) → ล้มเหลวตอบ 401','<b>Authorization</b> = คุณทำสิ่งนี้ได้ไหม (role, policy, ownership) → ล้มเหลวตอบ 403 (หรือ 404 เพื่อไม่เปิดเผยว่ามีอยู่)','JWT: ตรวจ signature + iss + aud + exp เสมอ และกำหนด algorithm ฝั่ง server ตายตัว']}
+],
+cont:[
+ {h:'เจาะลึก: Dockerfile ที่ดีสำหรับ ASP.NET Core'},
+ {code:`# ---- build ----
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY *.csproj ./
+RUN dotnet restore                      # layer นี้ถูก cache ถ้า csproj ไม่เปลี่ยน
+COPY . .
+RUN dotnet publish -c Release -o /app --no-restore
+
+# ---- runtime ----
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
+WORKDIR /app
+COPY --from=build /app .
+USER app                                # ไม่รันด้วย root
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "Api.dll"]
+# config/secret ส่งตอน runtime ผ่าน env var หรือ secret store — ไม่ใส่ใน image`},
+ {h:'Kubernetes objects ที่ต้องรู้จัก'},
+ {table:[['Object','หน้าที่'],['Pod','หน่วยเล็กสุดที่รัน container (ตายได้ ถูกแทนได้)'],['Deployment','จำนวน replica + rolling update ของ pod'],['Service','ชื่อ DNS และ load balance ไปยัง pod'],['Ingress','รับ HTTP จากภายนอกแล้ว route ตาม host/path'],['ConfigMap / Secret','config ทั่วไป / ค่าลับ ส่งเข้า pod'],['HorizontalPodAutoscaler','เพิ่ม/ลด replica ตาม CPU หรือ metric'],['Probe (liveness/readiness/startup)','ตรวจว่าควร restart / ส่ง traffic / ยัง start อยู่']]},
+ {h:'สาเหตุที่ container มีปัญหาบ่อย'},
+ {ul:['<b>CrashLoopBackOff</b>: แอปล้มตอน start (config ผิด, ต่อ DB ไม่ได้) → ดู kubectl logs --previous','<b>OOMKilled</b>: ใช้ memory เกิน limit','<b>ImagePullBackOff</b>: ชื่อ/tag image ผิด หรือไม่มีสิทธิ์ดึงจาก registry','readiness fail ตลอด: health endpoint เช็ก dependency ที่ช้าหรือผิด path']}
+],
+cicd:[
+ {h:'เจาะลึก: pipeline ของ .NET API (Azure DevOps YAML)'},
+ {code:`stages:
+- stage: Build
+  jobs:
+  - job: build
+    steps:
+    - script: dotnet restore --locked-mode          # ใช้ lock file กัน dependency เปลี่ยนเอง
+    - script: dotnet build -c Release --no-restore
+    - script: dotnet test -c Release --no-build --collect:"XPlat Code Coverage"
+    - task: SonarCloudAnalyze@1                      # quality gate
+    - script: dotnet publish -c Release -o $(Build.ArtifactStagingDirectory)
+    - publish: $(Build.ArtifactStagingDirectory)     # artifact เดียว ใช้ทุก environment
+      artifact: api
+- stage: DeployUAT
+  dependsOn: Build
+  jobs:
+  - deployment: uat
+    environment: uat
+- stage: DeployProd
+  dependsOn: DeployUAT
+  jobs:
+  - deployment: prod
+    environment: prod                                # environment นี้ตั้ง approval ไว้`},
+ {h:'กลยุทธ์ deploy เทียบกัน'},
+ {table:[['กลยุทธ์','downtime','rollback','ต้นทุน'],['Recreate','มี','ช้า (deploy ใหม่)','ต่ำ'],['Rolling','ไม่มี','ปานกลาง','ต่ำ'],['Blue-green / slot swap','ไม่มี','เร็วมาก (สลับกลับ)','สองชุด'],['Canary','ไม่มี','เร็ว จำกัดผลกระทบ','ต้องมี metric และ routing'],['Feature flag','ไม่มี','ปิด flag ทันที','ต้องจัดการ flag เก่า']]},
+ {h:'DORA metrics'},
+ {ul:['<b>Deployment frequency</b> — deploy บ่อยแค่ไหน','<b>Lead time for changes</b> — จาก commit ถึง production นานเท่าไร','<b>Change failure rate</b> — deploy กี่ % ที่ทำให้เกิดปัญหา','<b>Time to restore</b> — กู้ระบบได้เร็วแค่ไหน']}
+],
+cloud:[
+ {h:'เจาะลึก: เลือกบริการ compute ให้ตรงงาน'},
+ {table:[['บริการ','ดูแลเอง','เหมาะกับ'],['VM (IaaS)','OS, patch, runtime, แอป','ซอฟต์แวร์เดิมที่ต้องควบคุมเครื่อง'],['App Service (PaaS)','แอปและ config','web/API ทั่วไป deploy ง่าย'],['Container Apps / ECS','container และ config','microservices ที่ไม่อยากดูแล cluster'],['Kubernetes (AKS/EKS)','workload + cluster บางส่วน','ระบบใหญ่ ต้องการควบคุมละเอียด'],['Functions / Lambda','โค้ดฟังก์ชัน','งานตาม event/ตารางเวลา รันสั้น']]},
+ {h:'Storage และฐานข้อมูลบน cloud'},
+ {table:[['ต้องการ','บริการตัวอย่าง (Azure / AWS)'],['ไฟล์ รูป backup','Blob Storage / S3'],['ฐานข้อมูล relational แบบจัดการให้','Azure SQL / RDS'],['NoSQL กระจายหลาย region','Cosmos DB / DynamoDB'],['cache','Azure Cache for Redis / ElastiCache'],['ค้นหาข้อความ','Azure AI Search / OpenSearch'],['ส่งข้อความระหว่าง service','Service Bus / SQS+SNS']]},
+ {h:'ความปลอดภัยและค่าใช้จ่าย'},
+ {ul:['ใช้ <b>Managed Identity / IAM Role</b> แทน key ในโค้ด และให้สิทธิ์น้อยที่สุด','เปิด <b>private endpoint</b> ให้ฐานข้อมูล ไม่เปิด public','ติด tag (project/env/owner) ตั้ง budget alert และปิด resource ที่ไม่ใช้','งานคงที่ทั้งปี → reserved/savings plan, งานหยุดได้ → spot, งานเป็นช่วง ๆ → serverless']}
+],
+ai:[
+ {h:'เจาะลึก: สถาปัตยกรรม RAG ที่ใช้งานจริง'},
+ {ol:['<b>Ingest</b>: แบ่งเอกสารเป็น chunk (เช่น 300–800 token, มี overlap) เก็บ metadata (แหล่ง, วันที่, สิทธิ์)','<b>Embed</b>: แปลง chunk เป็นเวกเตอร์ เก็บใน vector index','<b>Retrieve</b>: แปลงคำถามเป็นเวกเตอร์ ค้น top-k (มัก hybrid: vector + keyword) แล้ว re-rank','<b>Generate</b>: ใส่ chunk ที่ได้ลง prompt สั่งให้ตอบจาก context เท่านั้น อ้างอิงแหล่ง และตอบว่าไม่ทราบเมื่อไม่พบ','<b>Evaluate</b>: ชุดคำถามทดสอบ วัดความถูกต้อง/ความครบ/การอ้างอิง ก่อนและหลังแก้']},
+ {h:'Metric ของ machine learning'},
+ {table:[['งาน','Metric','หมายเหตุ'],['Classification','Accuracy, Precision, Recall, F1, AUC','ข้อมูลไม่สมดุลใช้ precision/recall/F1 แทน accuracy'],['Regression','MAE, RMSE, R²','RMSE ลงโทษความผิดพลาดใหญ่มากกว่า'],['Ranking/Search','Precision@k, nDCG','วัดลำดับผลลัพธ์'],['LLM/RAG','faithfulness, answer relevance, groundedness','มักใช้ชุด eval + คนตรวจ']]},
+ {h:'ใช้ AI ในงานพัฒนาอย่างปลอดภัย'},
+ {ul:['ไม่ส่ง secret/ข้อมูลส่วนบุคคลเข้า AI ภายนอกโดยไม่ผ่านนโยบาย','review โค้ดที่ AI เขียนเหมือนโค้ดคน: เข้าใจทุกบรรทัด, มี test, ตรวจ security และ license','ให้ AI เรียกระบบผ่าน tool ที่โค้ดเราควบคุมสิทธิ์ ไม่ให้รัน SQL/คำสั่งตรง','ป้องกัน prompt injection: แยก instruction กับข้อมูล, จำกัดสิทธิ์ tool, ตรวจ output']}
+],
+sqlt:[
+ {h:'เจาะลึก: ลำดับการทำงานของ SQL (logical order)'},
+ {p:'<b>FROM/JOIN → WHERE → GROUP BY → HAVING → SELECT (window function คำนวณตรงนี้) → DISTINCT → ORDER BY → LIMIT</b> — เพราะเหตุนี้ WHERE ใช้ alias ใน SELECT หรือกรองผลของ window function ไม่ได้ ต้องห่อด้วย CTE/subquery ก่อน'},
+ {h:'Window function ที่ต้องเขียนคล่อง'},
+ {table:[['ฟังก์ชัน','ให้อะไร','ตัวอย่างใช้'],['ROW_NUMBER()','ลำดับไม่ซ้ำ','เลือก 1 แถวต่อกลุ่ม'],['RANK()','ลำดับ เสมอได้ ข้ามเลข (1,1,3)','top-N ที่ต้องเอาทุกตัวที่เสมอ'],['DENSE_RANK()','ลำดับ เสมอได้ ไม่ข้าม (1,1,2)','อันดับที่ 2 แบบไม่ข้าม'],['SUM() OVER (ORDER BY …)','ยอดสะสม','running total'],['SUM() OVER ()','ยอดรวมทั้งหมดในทุกแถว','คิด % ของทั้งหมด'],['LAG()/LEAD()','ค่าแถวก่อน/ถัดไป','เทียบกับเดือนก่อน, ระยะห่างวัน'],['AVG() OVER (PARTITION BY …)','ค่าเฉลี่ยของกลุ่มในทุกแถว','เทียบกับค่าเฉลี่ยแผนก']]},
+ {h:'รูปแบบ query ที่เจอบ่อยในข้อสอบ'},
+ {code:`-- Top-N ต่อกลุ่ม
+WITH r AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC) rn FROM s)
+SELECT * FROM r WHERE rn <= 3;
+
+-- คนที่ "ไม่เคย" ทำ X  (ปลอดภัยกับ NULL)
+SELECT c.* FROM customers c
+WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id AND o.status = 'PAID');
+
+-- Pivot ด้วย CASE
+SELECT category,
+       SUM(CASE WHEN month = '2026-01' THEN amount ELSE 0 END) AS jan,
+       SUM(CASE WHEN month = '2026-02' THEN amount ELSE 0 END) AS feb
+FROM sales GROUP BY category;
+
+-- ช่วงวันที่ที่ใช้ index ได้และครอบคลุมเวลาทั้งวัน
+WHERE order_date >= '2026-03-01' AND order_date < '2026-04-01'`}
+],
+pc:[
+ {h:'เจาะลึก: โครงสร้าง prompt ที่ใช้ได้กับทุกโจทย์แปลงข้อความ'},
+ {ol:['<b>หน้าที่</b>: ชื่อฟังก์ชัน input/output และชนิดข้อมูล ("คืน number หรือ null")','<b>ขั้นตอนตามลำดับ</b>: ตัดช่องว่าง → ตรวจรูปแบบ → แปลง → คืนผล (ลำดับสำคัญเมื่อกฎทับกัน)','<b>กฎแต่ละข้อ</b>: เขียนเป็นข้อ ๆ ชัดเจน ระบุสิ่งที่ "รับ" และ "ไม่รับ"','<b>รูปแบบ output ที่แน่นอน</b>: ตัวพิมพ์, ตัวคั่น, จำนวนตำแหน่งทศนิยม, ค่าที่คืนเมื่อผิด','<b>ตัวอย่าง</b>: กรณีปกติ 3–5 ตัว + กรณีขอบ (ว่าง, ช่องว่าง, ตัวพิมพ์) + กรณีที่ต้องปฏิเสธ']},
+ {h:'ช่องโหว่ของ prompt ที่ทำให้ตก hidden test'},
+ {table:[['ไม่ได้บอก','AI มักทำ','ผลที่ตามมา'],['ช่องว่างหน้า/หลัง','ไม่ trim หรือ trim ทุกที่','test ช่องว่างตก'],['ตัวพิมพ์ใหญ่เล็ก','เทียบแบบตรงตัว','"HRS" ไม่ผ่าน'],['ค่าว่าง/null/ชนิดผิด','throw exception','test กรณีขอบตก'],['ลำดับกฎ','ทำตามลำดับที่สะดวก','ผลทับกันผิด'],['สิ่งที่ต้องคงเดิม','normalize เกินจำเป็น','ข้อความเดิมถูกแก้'],['รูปแบบผิดที่ต้องปฏิเสธ','รับแบบหลวม ๆ','"12,34" ผ่านทั้งที่ควรผิด']]},
+ {h:'กลยุทธ์ใช้ 3 รอบให้คุ้ม'},
+ {ul:['รอบ 1: prompt ครบทุกกฎ + ตัวอย่างขอบ → ดูว่า test ไหนตก','รอบ 2: เพิ่มกฎ/ตัวอย่างเฉพาะกรณีที่ตก (อย่าเขียนใหม่ทั้งหมด)','รอบ 3: เก็บตก — ถ้ายังไม่ผ่าน เลือกส่งรอบที่ผ่านมากที่สุด']}
+],
+algo:[
+ {h:'เจาะลึก: เลือกอัลกอริทึมจากขนาดข้อมูล'},
+ {table:[['n สูงสุด','complexity ที่ยอมได้ (≈1 วินาที)','แนวทาง'],['≤ 20','O(2ⁿ), O(n!)','ลองทุกแบบ / backtracking'],['≤ 500','O(n³)','DP 3 มิติ, Floyd-Warshall'],['≤ 5,000','O(n²)','DP 2 มิติ, loop ซ้อน'],['≤ 200,000','O(n log n)','sort, heap, binary search, Dijkstra'],['≥ 1,000,000','O(n)','hash map, two pointers, sliding window, prefix sum']]},
+ {h:'จำ pattern จาก "คำในโจทย์"'},
+ {table:[['คำในโจทย์','Pattern'],['หาคู่/มีอยู่หรือไม่ ใน O(n)','Hash map/set'],['subarray/substring ต่อเนื่องที่ยาวสุด/สั้นสุด','Sliding window'],['ผลรวมช่วง, subarray sum = k','Prefix sum (+ hash map)'],['ค่าน้อยสุดที่ทำได้ / มากสุดที่ทำได้','Binary search on answer'],['k ตัวที่มาก/น้อยสุด, รวม k ชุด','Heap'],['จับคู่วงเล็บ, ค่าที่มากกว่าตัวถัดไป','Stack / monotonic stack'],['เส้นทางสั้นสุด น้ำหนักเท่ากัน','BFS'],['เส้นทางสั้นสุด น้ำหนักบวก','Dijkstra'],['กลุ่มที่เชื่อมกัน, วงจรในกราฟไม่มีทิศทาง','Union-Find'],['ลำดับงานที่มีเงื่อนไขก่อนหลัง','Topological sort'],['วิธีที่ดีที่สุด/จำนวนวิธี ที่ปัญหาย่อยซ้ำ','Dynamic programming']]},
+ {h:'C# ที่ใช้บ่อยในโจทย์'},
+ {code:`var seen = new HashSet<int>();                         // O(1) ตรวจซ้ำ
+var count = new Dictionary<string, int>();            // นับความถี่: count[k] = count.GetValueOrDefault(k) + 1;
+var pq = new PriorityQueue<int, int>();               // min-heap: pq.Enqueue(item, priority)
+var q = new Queue<(int r, int c)>();                  // BFS
+var st = new Stack<char>();                           // วงเล็บ / monotonic stack
+Array.Sort(arr, (a, b) => a[1].CompareTo(b[1]));      // เรียง int[][] ตามคอลัมน์ที่ 2
+int i = list.BinarySearch(x); if (i < 0) i = ~i;      // ตำแหน่งแรกที่ >= x
+long sum = 0;                                         // ระวัง overflow ใช้ long กับผลรวมใหญ่`}
+]
+};
+// แทรกเนื้อหาเจาะลึกไว้ก่อนส่วน "กับดักในข้อสอบ" (ถ้าไม่มี ให้ต่อท้าย)
+LESSONS.forEach(l => {
+  const extra = EXTRA[l.id]; if (!extra) return;
+  const i = l.blocks.findIndex(b => b.traps);
+  l.blocks.splice(i < 0 ? l.blocks.length : i, 0, ...extra);
+});
+
+/* ================= PROGRAM CODING — โจทย์เพิ่ม (p13–p21) ================= */
+PROBLEMS.push(
+{id:'p13',title:'Group Anagrams',pattern:'Hash map + canonical key',lv:'I',fn:'groupAnagrams',
+ desc:'จัดกลุ่มคำที่เป็น anagram กัน (ตัวอักษรชุดเดียวกัน)\nผลลัพธ์: แต่ละกลุ่มเรียงคำจากน้อยไปมาก และเรียงกลุ่มตามคำแรกของกลุ่ม\nตัวอย่าง: ["eat","tea","tan","ate","nat","bat"] → [["ate","eat","tea"],["bat"],["nat","tan"]]',
+ starter:'function groupAnagrams(words) {\n  \n}',
+ tests:[{args:[['eat','tea','tan','ate','nat','bat']],expected:[['ate','eat','tea'],['bat'],['nat','tan']]},{args:[['']],expected:[['']]},{args:[['a']],expected:[['a']]},{args:[['ab','ba','abc','cab','bca','x']],expected:[['ab','ba'],['abc','bca','cab'],['x']]},{args:[[]],expected:[]}],
+ hint:'key = ตัวอักษรของคำที่เรียงแล้ว (เช่น "aet") เก็บใน Map<key, string[]> แล้วค่อยเรียงตามที่โจทย์กำหนด',
+ sol:'function groupAnagrams(words) {\n  const groups = new Map();\n  for (const w of words) {\n    const key = [...w].sort().join("");\n    if (!groups.has(key)) groups.set(key, []);\n    groups.get(key).push(w);\n  }\n  const out = [...groups.values()].map(g => g.sort());\n  return out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));\n}',
+ cs:'public static List<List<string>> GroupAnagrams(string[] words)\n{\n    var groups = new Dictionary<string, List<string>>();\n    foreach (var w in words)\n    {\n        var chars = w.ToCharArray(); Array.Sort(chars);\n        var key = new string(chars);\n        if (!groups.TryGetValue(key, out var list)) groups[key] = list = new List<string>();\n        list.Add(w);\n    }\n    return groups.Values\n        .Select(g => g.OrderBy(x => x, StringComparer.Ordinal).ToList())\n        .OrderBy(g => g[0], StringComparer.Ordinal)\n        .ToList();\n}',
+ cx:'O(n · k log k) เมื่อ k = ความยาวคำ'},
+
+{id:'p14',title:'Product Except Self',pattern:'Prefix / suffix',lv:'I',fn:'productExceptSelf',
+ desc:'คืน array ที่ตำแหน่ง i = ผลคูณของทุกตัวยกเว้น nums[i] ห้ามใช้การหาร และต้องเป็น O(n)\nตัวอย่าง: [1,2,3,4] → [24,12,8,6]',
+ starter:'function productExceptSelf(nums) {\n  \n}',
+ tests:[{args:[[1,2,3,4]],expected:[24,12,8,6]},{args:[[2,3]],expected:[3,2]},{args:[[1,0,3]],expected:[0,3,0]},{args:[[0,0,2]],expected:[0,0,0]},{args:[[-1,2,-3]],expected:[-6,3,-2]},{args:[[5]],expected:[1]}],
+ hint:'ผลลัพธ์ = (ผลคูณทุกตัวทางซ้าย) × (ผลคูณทุกตัวทางขวา) เดินสองรอบ ซ้าย→ขวา แล้วขวา→ซ้าย',
+ sol:'function productExceptSelf(nums) {\n  const n = nums.length, out = new Array(n).fill(1);\n  let left = 1;\n  for (let i = 0; i < n; i++) { out[i] = left; left *= nums[i]; }\n  let right = 1;\n  for (let i = n - 1; i >= 0; i--) { out[i] *= right; right *= nums[i]; }\n  return out.map(x => x + 0);\n}',
+ cs:'public static int[] ProductExceptSelf(int[] nums)\n{\n    int n = nums.Length;\n    var res = new int[n];\n    int left = 1;\n    for (int i = 0; i < n; i++) { res[i] = left; left *= nums[i]; }\n    int right = 1;\n    for (int i = n - 1; i >= 0; i--) { res[i] *= right; right *= nums[i]; }\n    return res;\n}',
+ cx:'O(n) เวลา, O(1) พื้นที่เพิ่ม (ไม่นับ output)'},
+
+{id:'p15',title:'Merge K Sorted Arrays',pattern:'Min-heap',lv:'A',fn:'mergeKSorted',
+ desc:'รวม k array ที่เรียงจากน้อยไปมากแล้ว ให้เป็น array เดียวที่เรียงแล้ว\nข้อจำกัด: รวมสูงสุด 200,000 ตัว จาก k สูงสุด 2,000 array — การต่อทั้งหมดแล้ว sort ก็ผ่าน แต่ให้ฝึกแบบ min-heap ซึ่งเป็นแนวที่ข้อสอบชอบถาม (merge ทีละคู่แบบเรียงลำดับจะช้าเกิน)\nตัวอย่าง: [[1,4,5],[1,3,4],[2,6]] → [1,1,2,3,4,4,5,6]',
+ starter:'function mergeKSorted(arrays) {\n  \n}',
+ tests:[{args:[[[1,4,5],[1,3,4],[2,6]]],expected:[1,1,2,3,4,4,5,6]},{args:[[]],expected:[]},{args:[[[],[]]],expected:[]},{args:[[[-3,-1],[],[-2,0,9]]],expected:[-3,-2,-1,0,9]},{args:[[[5]]],expected:[5]},{n:'Performance: 2,000 arrays รวม 200,000 ตัว',gen:'mergek-big',maxMs:1500}],
+ hint:'ใส่ตัวแรกของทุก array ลง min-heap (ค่า, array ไหน, ตำแหน่ง) ดึงตัวเล็กสุดออก แล้วใส่ตัวถัดไปของ array เดียวกันกลับเข้า heap',
+ sol:'function mergeKSorted(arrays) {\n  const heap = [];\n  const less = (a, b) => a[0] < b[0];\n  const push = x => { heap.push(x); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (!less(heap[i], heap[p])) break; [heap[i], heap[p]] = [heap[p], heap[i]]; i = p; } };\n  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && less(heap[l], heap[m])) m = l; if (r < heap.length && less(heap[r], heap[m])) m = r; if (m === i) break; [heap[i], heap[m]] = [heap[m], heap[i]]; i = m; } } return top; };\n  arrays.forEach((a, k) => { if (a.length) push([a[0], k, 0]); });\n  const out = [];\n  while (heap.length) {\n    const [v, k, i] = pop();\n    out.push(v);\n    if (i + 1 < arrays[k].length) push([arrays[k][i + 1], k, i + 1]);\n  }\n  return out;\n}',
+ cs:'public static int[] MergeKSorted(int[][] arrays)\n{\n    var pq = new PriorityQueue<(int k, int i), int>();\n    for (int k = 0; k < arrays.Length; k++)\n        if (arrays[k].Length > 0) pq.Enqueue((k, 0), arrays[k][0]);\n    var res = new List<int>();\n    while (pq.TryDequeue(out var cur, out var v))\n    {\n        res.Add(v);\n        if (cur.i + 1 < arrays[cur.k].Length) pq.Enqueue((cur.k, cur.i + 1), arrays[cur.k][cur.i + 1]);\n    }\n    return res.ToArray();\n}',
+ cx:'O(N log k) เมื่อ N = จำนวนตัวทั้งหมด'},
+
+{id:'p16',title:'LRU Cache Simulator',pattern:'Map (insertion order) / Hash + linked list',lv:'I',fn:'lruCache',
+ desc:'จำลอง LRU cache ความจุ capacity รับคำสั่งเป็น array:\n["put", key, value] — ใส่/อัปเดตค่า ถ้าเต็มให้ลบ key ที่ไม่ได้ใช้นานที่สุดก่อน\n["get", key] — คืนค่า ถ้าไม่มีคืน -1 (การ get นับว่าเป็นการใช้งาน)\nคืน array ของผลลัพธ์จากทุก "get" ตามลำดับ\nตัวอย่าง: capacity 2, put(1,1) put(2,2) get(1)=1 put(3,3) [ลบ 2] get(2)=-1 → [1,-1]',
+ starter:'function lruCache(capacity, ops) {\n  \n}',
+ tests:[{args:[2,[['put',1,1],['put',2,2],['get',1],['put',3,3],['get',2],['put',4,4],['get',1],['get',3],['get',4]]],expected:[1,-1,-1,3,4]},{args:[1,[['put',1,10],['get',1],['put',2,20],['get',1],['get',2]]],expected:[10,-1,20]},{args:[2,[['put',1,1],['put',1,5],['put',2,2],['get',1],['put',3,3],['get',2],['get',1]]],expected:[5,-1,5]},{args:[3,[['get',9]]],expected:[-1]}],
+ hint:'Map ใน JS จำลำดับการใส่ — ตอน get/put ให้ delete แล้ว set ใหม่ (ย้ายไปท้าย) ตัวที่ใช้นานสุดคือ key แรกของ Map',
+ sol:'function lruCache(capacity, ops) {\n  const m = new Map(), out = [];\n  for (const [op, k, v] of ops) {\n    if (op === "get") {\n      if (!m.has(k)) { out.push(-1); continue; }\n      const val = m.get(k); m.delete(k); m.set(k, val); out.push(val);\n    } else {\n      if (m.has(k)) m.delete(k);\n      else if (m.size >= capacity) m.delete(m.keys().next().value);\n      m.set(k, v);\n    }\n  }\n  return out;\n}',
+ cs:'public static int[] LruCache(int capacity, object[][] ops)\n{\n    var map = new Dictionary<int, LinkedListNode<(int key, int val)>>();\n    var order = new LinkedList<(int key, int val)>();   // หัว = ใช้ล่าสุด\n    var res = new List<int>();\n    foreach (var op in ops)\n    {\n        int key = Convert.ToInt32(op[1]);\n        if ((string)op[0] == "get")\n        {\n            if (!map.TryGetValue(key, out var node)) { res.Add(-1); continue; }\n            order.Remove(node); order.AddFirst(node); res.Add(node.Value.val);\n        }\n        else\n        {\n            int val = Convert.ToInt32(op[2]);\n            if (map.TryGetValue(key, out var node)) order.Remove(node);\n            else if (map.Count >= capacity) { map.Remove(order.Last!.Value.key); order.RemoveLast(); }\n            map[key] = order.AddFirst((key, val));\n        }\n    }\n    return res.ToArray();\n}',
+ cx:'O(1) ต่อคำสั่ง'},
+
+{id:'p17',title:'Longest Increasing Subsequence',pattern:'DP + binary search (patience)',lv:'A',fn:'lisLength',
+ desc:'คืนความยาวของ subsequence ที่เพิ่มขึ้นแบบเคร่งครัด (strictly increasing) ที่ยาวที่สุด\nข้อจำกัด: n สูงสุด 100,000 — วิธี O(n²) จะไม่ผ่าน performance test\nตัวอย่าง: [10,9,2,5,3,7,101,18] → 4 (2,3,7,18)',
+ starter:'function lisLength(nums) {\n  \n}',
+ tests:[{args:[[10,9,2,5,3,7,101,18]],expected:4},{args:[[0,1,0,3,2,3]],expected:4},{args:[[7,7,7,7]],expected:1},{args:[[]],expected:0},{args:[[5,4,3,2,1]],expected:1},{args:[[1,2,3,4,5]],expected:5},{n:'Performance: n = 100,000',gen:'lis-big',maxMs:800}],
+ hint:'tails[len] = ค่าท้ายที่เล็กที่สุดของ subsequence ยาว len+1 สำหรับแต่ละ x ใช้ binary search หาตำแหน่งแรกที่ tails >= x แล้วแทนที่ (หรือต่อท้าย)',
+ sol:'function lisLength(nums) {\n  const tails = [];\n  for (const x of nums) {\n    let lo = 0, hi = tails.length;\n    while (lo < hi) { const mid = (lo + hi) >> 1; if (tails[mid] < x) lo = mid + 1; else hi = mid; }\n    tails[lo] = x;\n  }\n  return tails.length;\n}',
+ cs:'public static int LisLength(int[] nums)\n{\n    var tails = new List<int>();\n    foreach (var x in nums)\n    {\n        int i = tails.BinarySearch(x);\n        if (i < 0) i = ~i;          // ตำแหน่งแรกที่ >= x\n        if (i == tails.Count) tails.Add(x); else tails[i] = x;\n    }\n    return tails.Count;\n}',
+ cx:'O(n log n)'},
+
+{id:'p18',title:'Number of Islands',pattern:'Grid DFS/BFS',lv:'I',fn:'numIslands',
+ desc:'grid เป็น array ของ string ประกอบด้วย "1" (แผ่นดิน) และ "0" (น้ำ) นับจำนวนเกาะ (แผ่นดินที่ติดกันแนวบน/ล่าง/ซ้าย/ขวา)\nตัวอย่าง: ["11000","11000","00100","00011"] → 3',
+ starter:'function numIslands(grid) {\n  \n}',
+ tests:[{args:[['11000','11000','00100','00011']],expected:3},{args:[['11110','11010','11000','00000']],expected:1},{args:[['0']],expected:0},{args:[['1']],expected:1},{args:[['101','010','101']],expected:5},{args:[[]],expected:0}],
+ hint:'วนทุกช่อง เจอ "1" ที่ยังไม่เคยไป = เกาะใหม่ แล้ว flood fill (BFS ด้วย queue/stack เพื่อไม่ให้ recursion ลึกเกิน) ทำเครื่องหมายว่าไปแล้ว',
+ sol:'function numIslands(grid) {\n  const R = grid.length, C = R ? grid[0].length : 0;\n  const seen = Array.from({length: R}, () => new Array(C).fill(false));\n  let count = 0;\n  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {\n    if (grid[r][c] !== "1" || seen[r][c]) continue;\n    count++;\n    const stack = [[r, c]]; seen[r][c] = true;\n    while (stack.length) {\n      const [y, x] = stack.pop();\n      for (const [dy, dx] of [[1,0],[-1,0],[0,1],[0,-1]]) {\n        const ny = y + dy, nx = x + dx;\n        if (ny >= 0 && ny < R && nx >= 0 && nx < C && grid[ny][nx] === "1" && !seen[ny][nx]) { seen[ny][nx] = true; stack.push([ny, nx]); }\n      }\n    }\n  }\n  return count;\n}',
+ cs:'public static int NumIslands(string[] grid)\n{\n    int R = grid.Length, C = R > 0 ? grid[0].Length : 0, count = 0;\n    var seen = new bool[R, C];\n    int[] dy = { 1, -1, 0, 0 }, dx = { 0, 0, 1, -1 };\n    for (int r = 0; r < R; r++)\n        for (int c = 0; c < C; c++)\n        {\n            if (grid[r][c] != \'1\' || seen[r, c]) continue;\n            count++;\n            var stack = new Stack<(int y, int x)>();\n            stack.Push((r, c)); seen[r, c] = true;\n            while (stack.Count > 0)\n            {\n                var (y, x) = stack.Pop();\n                for (int d = 0; d < 4; d++)\n                {\n                    int ny = y + dy[d], nx = x + dx[d];\n                    if (ny >= 0 && ny < R && nx >= 0 && nx < C && grid[ny][nx] == \'1\' && !seen[ny, nx])\n                    { seen[ny, nx] = true; stack.Push((ny, nx)); }\n                }\n            }\n        }\n    return count;\n}',
+ cx:'O(R × C)'},
+
+{id:'p19',title:'Max Non-overlapping Meetings',pattern:'Greedy (sort by end)',lv:'I',fn:'maxMeetings',
+ desc:'มีห้องประชุมห้องเดียว และคำขอจอง [start, end) จำนวนมาก เลือกจองให้ได้จำนวนการประชุมมากที่สุดโดยไม่ทับกัน (ประชุมที่จบเวลา 10 กับที่เริ่ม 10 ไม่ทับกัน)\nตัวอย่าง: [[1,3],[2,4],[3,5],[0,7],[5,9],[8,10]] → 3',
+ starter:'function maxMeetings(meetings) {\n  \n}',
+ tests:[{args:[[[1,3],[2,4],[3,5],[0,7],[5,9],[8,10]]],expected:3},{args:[[]],expected:0},{args:[[[1,2],[2,3],[3,4]]],expected:3},{args:[[[1,10],[2,3],[4,5],[6,7]]],expected:3},{args:[[[1,5],[1,5],[1,5]]],expected:1},{args:[[[5,6],[1,2],[3,4],[0,10]]],expected:3}],
+ hint:'เรียงตามเวลาจบจากน้อยไปมาก แล้วเลือกการประชุมที่เริ่ม >= เวลาจบของตัวที่เลือกล่าสุด (เลือกตัวที่จบเร็วที่สุดเสมอ)',
+ sol:'function maxMeetings(meetings) {\n  const sorted = meetings.slice().sort((a, b) => a[1] - b[1]);\n  let count = 0, lastEnd = -Infinity;\n  for (const [s, e] of sorted) if (s >= lastEnd) { count++; lastEnd = e; }\n  return count;\n}',
+ cs:'public static int MaxMeetings(int[][] meetings)\n{\n    int count = 0; long lastEnd = long.MinValue;\n    foreach (var m in meetings.OrderBy(m => m[1]))\n        if (m[0] >= lastEnd) { count++; lastEnd = m[1]; }\n    return count;\n}',
+ cx:'O(n log n)'},
+
+{id:'p20',title:'Sliding Window Rate Limiter',pattern:'Queue / sliding window',lv:'I',fn:'rateLimit',
+ desc:'API อนุญาตให้แต่ละ client เรียกได้ไม่เกิน limit ครั้ง ภายในหน้าต่าง windowMs มิลลิวินาที (นับย้อนหลังจากเวลาปัจจุบัน: เวลา t อยู่ในหน้าต่างของ now ถ้า now - t < windowMs)\nrequests = [[timestampMs, clientId], ...] เรียงตามเวลาแล้ว คืน array ของ true/false ว่าแต่ละ request ได้รับอนุญาตหรือไม่ (request ที่ถูกปฏิเสธไม่นับรวมในโควตา)\nตัวอย่าง: limit 2, window 1000: [[0,"a"],[100,"a"],[200,"a"],[1000,"a"]] → [true,true,false,true]',
+ starter:'function rateLimit(limit, windowMs, requests) {\n  \n}',
+ tests:[{args:[2,1000,[[0,'a'],[100,'a'],[200,'a'],[1000,'a']]],expected:[true,true,false,true]},{args:[1,500,[[0,'a'],[0,'b'],[499,'a'],[500,'a']]],expected:[true,true,false,true]},{args:[3,1000,[]],expected:[]},{args:[2,100,[[0,'x'],[50,'x'],[99,'x'],[100,'x'],[149,'x'],[150,'x']]],expected:[true,true,false,true,false,true]}],
+ hint:'เก็บ queue ของเวลาที่ "ได้รับอนุญาต" ต่อ client ก่อนตัดสิน ให้ดึงเวลาที่ now - t >= windowMs ออกจากหัว queue แล้วดูว่าจำนวนที่เหลือ < limit หรือไม่',
+ sol:'function rateLimit(limit, windowMs, requests) {\n  const q = new Map(), out = [];\n  for (const [t, id] of requests) {\n    if (!q.has(id)) q.set(id, []);\n    const times = q.get(id);\n    while (times.length && t - times[0] >= windowMs) times.shift();\n    if (times.length < limit) { times.push(t); out.push(true); } else out.push(false);\n  }\n  return out;\n}',
+ cs:'public static bool[] RateLimit(int limit, int windowMs, object[][] requests)\n{\n    var q = new Dictionary<string, Queue<long>>();\n    var res = new List<bool>();\n    foreach (var r in requests)\n    {\n        long t = Convert.ToInt64(r[0]); string id = (string)r[1];\n        if (!q.TryGetValue(id, out var times)) q[id] = times = new Queue<long>();\n        while (times.Count > 0 && t - times.Peek() >= windowMs) times.Dequeue();\n        if (times.Count < limit) { times.Enqueue(t); res.Add(true); } else res.Add(false);\n    }\n    return res.ToArray();\n}',
+ cx:'O(n) รวม (แต่ละเวลาเข้า/ออก queue ครั้งเดียว)'},
+
+{id:'p21',title:'Sliding Window Maximum',pattern:'Monotonic deque',lv:'A',fn:'maxSlidingWindow',
+ desc:'คืนค่าสูงสุดของทุกหน้าต่างขนาด k ที่เลื่อนจากซ้ายไปขวา\nข้อจำกัด: n สูงสุด 200,000 และ k สูงสุด n — วิธี O(n·k) จะไม่ผ่าน performance test\nตัวอย่าง: nums=[1,3,-1,-3,5,3,6,7], k=3 → [3,3,5,5,6,7]',
+ starter:'function maxSlidingWindow(nums, k) {\n  \n}',
+ tests:[{args:[[1,3,-1,-3,5,3,6,7],3],expected:[3,3,5,5,6,7]},{args:[[1],1],expected:[1]},{args:[[9,8,7,6],2],expected:[9,8,7]},{args:[[1,2,3,4],4],expected:[4]},{args:[[4,4,4],2],expected:[4,4]},{n:'Performance: n = 200,000, k = 50,000',gen:'slide-big',maxMs:800}],
+ hint:'เก็บ "index" ใน deque ให้ค่าลดลงจากหัวไปท้าย: ก่อนใส่ i ให้เอาตัวท้ายที่ค่าน้อยกว่า/เท่ากับ nums[i] ออก และเอาหัวที่หลุดหน้าต่างออก หัว deque คือค่าสูงสุด',
+ sol:'function maxSlidingWindow(nums, k) {\n  const dq = new Array(nums.length); let head = 0, tail = 0;\n  const out = [];\n  for (let i = 0; i < nums.length; i++) {\n    while (tail > head && nums[dq[tail - 1]] <= nums[i]) tail--;\n    dq[tail++] = i;\n    if (dq[head] <= i - k) head++;\n    if (i >= k - 1) out.push(nums[dq[head]]);\n  }\n  return out;\n}',
+ cs:'public static int[] MaxSlidingWindow(int[] nums, int k)\n{\n    var dq = new LinkedList<int>();   // เก็บ index ค่าลดลงจากหัวไปท้าย\n    var res = new List<int>();\n    for (int i = 0; i < nums.Length; i++)\n    {\n        while (dq.Count > 0 && nums[dq.Last!.Value] <= nums[i]) dq.RemoveLast();\n        dq.AddLast(i);\n        if (dq.First!.Value <= i - k) dq.RemoveFirst();\n        if (i >= k - 1) res.Add(nums[dq.First.Value]);\n    }\n    return res.ToArray();\n}',
+ cx:'O(n)'}
+);
+Object.assign(GEN, {
+  'mergek-big': () => {
+    const r = lcg(777), arrays = [];
+    for (let k = 0; k < 2000; k++) { const a = []; let v = Math.floor(r() * 1000); for (let i = 0; i < 100; i++) { v += Math.floor(r() * 50); a.push(v); } arrays.push(a); }
+    return [arrays];
+  },
+  'lis-big': () => { const r = lcg(31337), a = []; for (let i = 0; i < 100000; i++) a.push(Math.floor(r() * 1e9)); return [a]; },
+  'slide-big': () => { const r = lcg(2024), a = []; for (let i = 0; i < 200000; i++) a.push(Math.floor(r() * 2e9) - 1e9); return [a, 50000]; }
+});
+
 /* ================= SQL LAB ================= */
 const SHOP_DB = `
 CREATE TABLE customers(id INTEGER PRIMARY KEY, name TEXT, city TEXT, joined_at TEXT);
@@ -893,6 +1271,63 @@ const PROMPT_TASKS = [
  sol:"function isValidThaiId(id) {\n  if (!/^(\\d{13}|\\d-\\d{4}-\\d{5}-\\d{2}-\\d)$/.test(id)) return false;\n  const d = id.replace(/-/g, '').split('').map(Number);\n  if (d[0] === 0) return false;\n  let sum = 0;\n  for (let i = 0; i < 12; i++) sum += d[i] * (13 - i);\n  return (11 - (sum % 11)) % 10 === d[12];\n}",
  sample:'เขียนฟังก์ชัน isValidThaiId(id) รับข้อความ คืน true ถ้าเป็นเลขบัตรประชาชนไทยที่ถูกต้อง ไม่งั้นคืน false\nกติกา:\n1. รูปแบบที่รับมีสองแบบเท่านั้น: ตัวเลข 13 หลักติดกัน หรือแบบมีขีดที่แบ่งกลุ่มเป็น 1, 4, 5, 2, 1 หลักตามลำดับ (เช่น 1-1017-00203-45-0) รูปแบบอื่น เช่น ขีดผิดตำแหน่ง มีช่องว่าง มีตัวอักษร หลักขาดหรือเกิน ให้คืน false\n2. นำตัวเลข 13 หลักมาตรวจ หลักแรกต้องไม่ใช่ 0\n3. คูณหลักที่ 1 ถึง 12 ด้วย 13, 12, 11, ... ลงไปจนถึง 2 ตามลำดับ แล้วรวมกัน\n4. นำผลรวมหารด้วย 11 เอาเศษ แล้วเอา 11 ลบเศษนั้น จากนั้นหารด้วย 10 เอาเศษ (เช่น ถ้าได้ 10 จะเหลือ 0 ถ้าได้ 11 จะเหลือ 1)\n5. ค่าที่ได้ต้องเท่ากับหลักที่ 13 จึงถือว่าถูกต้อง\nตัวอย่าง: "1101700203450" → true, "1-1017-00203-45-0" → true, "3700100123455" → true, "1101700203451" → false, "11-017-00203-45-0" → false, "1 1017 00203 45 0" → false, "0000000000001" → false'}
 ];
+
+/* ================= SQL LAB — โจทย์เพิ่ม (ข้อ 11–20) ใช้ฐานข้อมูลร้านค้าเดิม ================= */
+SQL_EX.push(
+{t:'ลูกค้าที่ยังไม่เคยจ่ายเงินเลย (NOT EXISTS)',lv:'I',d:'แสดง name ของลูกค้าที่ไม่มี order สถานะ PAID เลย (รวมคนที่มีแต่ order สถานะอื่น และคนที่ไม่มี order) เรียงตาม name — ต่างจากข้อ 2 ตรงที่คนมี order PENDING ต้องอยู่ในผลด้วย',
+ ref:"SELECT c.name\nFROM customers c\nWHERE NOT EXISTS (\n  SELECT 1 FROM orders o WHERE o.customer_id = c.id AND o.status = 'PAID')\nORDER BY c.name;"},
+{t:'Pivot ยอดขายรายหมวดแยกเดือน (CASE WHEN)',lv:'I',d:"จาก order ที่ PAID ในเดือน ม.ค.–มี.ค. 2026 แสดง category, jan, feb, mar (ยอดขายของแต่ละเดือน ถ้าไม่มีให้เป็น 0) เรียงตาม category — ใช้ substr(order_date,1,7) แยกเดือน",
+ ref:"SELECT p.category,\n  SUM(CASE WHEN substr(o.order_date,1,7) = '2026-01' THEN i.qty * i.unit_price ELSE 0 END) AS jan,\n  SUM(CASE WHEN substr(o.order_date,1,7) = '2026-02' THEN i.qty * i.unit_price ELSE 0 END) AS feb,\n  SUM(CASE WHEN substr(o.order_date,1,7) = '2026-03' THEN i.qty * i.unit_price ELSE 0 END) AS mar\nFROM order_items i\nJOIN orders o ON o.id = i.order_id AND o.status = 'PAID'\nJOIN products p ON p.id = i.product_id\nWHERE o.order_date >= '2026-01-01' AND o.order_date < '2026-04-01'\nGROUP BY p.category\nORDER BY p.category;"},
+{t:'ส่วนแบ่งยอดขายของแต่ละหมวด (% of total)',lv:'I',d:'จาก order ที่ PAID แสดง category, revenue, pct (ร้อยละของยอดรวมทุกหมวด ปัดทศนิยม 1 ตำแหน่งด้วย ROUND) เรียง revenue มากไปน้อย แล้ว category',
+ ref:"SELECT p.category, SUM(i.qty * i.unit_price) AS revenue,\n       ROUND(100.0 * SUM(i.qty * i.unit_price) / SUM(SUM(i.qty * i.unit_price)) OVER (), 1) AS pct\nFROM order_items i\nJOIN orders o ON o.id = i.order_id AND o.status = 'PAID'\nJOIN products p ON p.id = i.product_id\nGROUP BY p.category\nORDER BY revenue DESC, p.category;"},
+{t:'พนักงานที่ได้มากกว่าค่าเฉลี่ยของแผนกตัวเอง',lv:'I',d:'แสดง dept, name, salary, dept_avg (ค่าเฉลี่ยเงินเดือนของแผนก ปัด 2 ตำแหน่ง) เฉพาะคนที่ salary > ค่าเฉลี่ยของแผนกตัวเอง เรียง dept, salary มากไปน้อย, name',
+ ref:"WITH x AS (\n  SELECT dept, name, salary, AVG(salary) OVER (PARTITION BY dept) AS dept_avg FROM employees)\nSELECT dept, name, salary, ROUND(dept_avg, 2) AS dept_avg\nFROM x WHERE salary > dept_avg\nORDER BY dept, salary DESC, name;"},
+{t:'ลูกค้าคนแรกของแต่ละเมือง',lv:'I',d:'แสดง city, name, joined_at ของลูกค้าที่สมัครเร็วที่สุดในแต่ละเมือง (ถ้าวันเท่ากันเลือก id น้อยกว่า) เรียงตาม city',
+ ref:"WITH r AS (\n  SELECT city, name, joined_at, ROW_NUMBER() OVER (PARTITION BY city ORDER BY joined_at, id) AS rn FROM customers)\nSELECT city, name, joined_at FROM r WHERE rn = 1 ORDER BY city;"},
+{t:'ยอดแต่ละ order เทียบกับครั้งก่อนของลูกค้าคนเดิม',lv:'A',d:'สำหรับ order ที่ PAID แสดง name, order_id, total, prev_total (ยอดของ order PAID ครั้งก่อนของลูกค้าคนเดียวกัน ครั้งแรกเป็น NULL), increased (1 ถ้า total > prev_total, 0 ถ้าไม่, NULL ถ้าเป็นครั้งแรก) เรียง name แล้ว order_date',
+ ref:"WITH t AS (\n  SELECT c.name, o.id AS order_id, o.order_date, SUM(i.qty * i.unit_price) AS total\n  FROM orders o\n  JOIN customers c ON c.id = o.customer_id\n  JOIN order_items i ON i.order_id = o.id\n  WHERE o.status = 'PAID'\n  GROUP BY c.name, o.id, o.order_date),\nl AS (\n  SELECT *, LAG(total) OVER (PARTITION BY name ORDER BY order_date) AS prev_total FROM t)\nSELECT name, order_id, total, prev_total,\n       CASE WHEN prev_total IS NULL THEN NULL WHEN total > prev_total THEN 1 ELSE 0 END AS increased\nFROM l ORDER BY name, order_date;"},
+{t:'ระยะห่างเฉลี่ย (วัน) ระหว่างการซื้อของลูกค้าประจำ',lv:'A',d:'สำหรับลูกค้าที่มี order PAID ตั้งแต่ 2 ครั้งขึ้นไป แสดง name, orders (จำนวน order PAID), avg_gap_days (ค่าเฉลี่ยจำนวนวันระหว่าง order ติดกัน ปัด 1 ตำแหน่ง ใช้ julianday(substr(order_date,1,10))) เรียง avg_gap_days น้อยไปมาก แล้ว name',
+ ref:"WITH p AS (\n  SELECT c.name, julianday(substr(o.order_date, 1, 10)) AS d\n  FROM orders o JOIN customers c ON c.id = o.customer_id\n  WHERE o.status = 'PAID'),\ng AS (\n  SELECT name, d - LAG(d) OVER (PARTITION BY name ORDER BY d) AS gap FROM p)\nSELECT name, COUNT(*) AS orders, ROUND(AVG(gap), 1) AS avg_gap_days\nFROM g GROUP BY name HAVING COUNT(*) >= 2\nORDER BY avg_gap_days, name;"},
+{t:'หัวหน้าและทีมที่ดูแลโดยตรง (self join)',lv:'I',d:'แสดง manager (ชื่อหัวหน้า), reports (จำนวนลูกน้องโดยตรง), team_salary (ผลรวมเงินเดือนลูกน้องโดยตรง) เฉพาะคนที่มีลูกน้อง เรียง reports มากไปน้อย แล้ว manager',
+ ref:"SELECT m.name AS manager, COUNT(*) AS reports, SUM(e.salary) AS team_salary\nFROM employees e\nJOIN employees m ON m.id = e.manager_id\nGROUP BY m.id, m.name\nORDER BY reports DESC, manager;"},
+{t:'ลูกค้าที่ใช้จ่ายสูงสุดของแต่ละเมือง (กรณีเสมอเอาทุกคน)',lv:'A',d:'จาก order ที่ PAID คำนวณยอดใช้จ่ายรวมต่อลูกค้า แล้วแสดง city, name, spent ของลูกค้าที่ยอดสูงสุดในเมืองของตัวเอง (ถ้าเท่ากันให้แสดงทุกคน) เรียง city แล้ว name — ใช้ RANK ไม่ใช่ ROW_NUMBER',
+ ref:"WITH s AS (\n  SELECT c.city, c.name, SUM(i.qty * i.unit_price) AS spent\n  FROM customers c\n  JOIN orders o ON o.customer_id = c.id AND o.status = 'PAID'\n  JOIN order_items i ON i.order_id = o.id\n  GROUP BY c.id, c.city, c.name),\nr AS (SELECT *, RANK() OVER (PARTITION BY city ORDER BY spent DESC) AS rk FROM s)\nSELECT city, name, spent FROM r WHERE rk = 1 ORDER BY city, name;"},
+{t:'คู่สินค้าที่ถูกซื้อใน order เดียวกันบ่อยที่สุด',lv:'A',d:'จาก order ที่ PAID หา "คู่สินค้า" ที่อยู่ใน order เดียวกัน แสดง product_a, product_b (ชื่อสินค้า โดย product_a คือสินค้าที่ id น้อยกว่า), times (จำนวน order ที่มีทั้งคู่) เรียง times มากไปน้อย แล้ว product_a, product_b',
+ ref:"SELECT pa.name AS product_a, pb.name AS product_b, COUNT(*) AS times\nFROM order_items a\nJOIN order_items b ON b.order_id = a.order_id AND b.product_id > a.product_id\nJOIN orders o ON o.id = a.order_id AND o.status = 'PAID'\nJOIN products pa ON pa.id = a.product_id\nJOIN products pb ON pb.id = b.product_id\nGROUP BY pa.name, pb.name\nORDER BY times DESC, product_a, product_b;"}
+);
+
+/* ================= PROMPT LAB — โจทย์เพิ่ม (pt3–pt5) ================= */
+PROMPT_TASKS.push(
+{id:'pt3',title:'จัดรูปแบบเบอร์มือถือไทย',fn:'formatThaiMobile',params:'text',
+ spec:'ฟังก์ชัน formatThaiMobile(text) คืนเบอร์ในรูปแบบ "0XX-XXX-XXXX" หรือข้อความว่าง "" ถ้าไม่ใช่เบอร์มือถือไทยที่ถูกต้อง\n1) ตัดช่องว่างหน้า/หลังก่อน ภายในเบอร์อนุญาตให้มีเฉพาะตัวเลข ช่องว่าง และขีด (-) เป็นตัวคั่น อักขระอื่นทั้งหมดถือว่าผิด ยกเว้นข้อ 2\n2) ขึ้นต้นด้วย "+66" ได้ ให้แทน +66 ด้วย 0 (ตัวเลขหลัง +66 ต้องไม่ขึ้นต้นด้วย 0)\n3) หลังตัดตัวคั่นต้องได้ตัวเลข 10 หลัก ขึ้นต้นด้วย 06, 08 หรือ 09 เท่านั้น',
+ tests:[
+  {n:'มีขีดอยู่แล้ว',args:['081-234-5678'],expected:'081-234-5678'},{n:'ติดกัน',args:['0812345678'],expected:'081-234-5678'},{n:'มีช่องว่าง',args:['081 234 5678'],expected:'081-234-5678'},
+  {n:'+66',args:['+66 81 234 5678'],expected:'081-234-5678'},{n:'+66 ติดกัน',args:['+66912345678'],expected:'091-234-5678'},{n:'ขึ้นต้น 06',args:['0612345678'],expected:'061-234-5678'},
+  {n:'ช่องว่างหน้าหลัง',args:['  0891112222  '],expected:'089-111-2222'},{n:'เบอร์บ้าน 02',args:['021234567'],expected:''},{n:'9 หลัก',args:['081234567'],expected:''},
+  {n:'11 หลัก',args:['08123456789'],expected:''},{n:'ขึ้นต้น 07',args:['0712345678'],expected:''},{n:'+66 ตามด้วย 0',args:['+660812345678'],expected:''},
+  {n:'มีวงเล็บ',args:['(081) 234 5678'],expected:''},{n:'มีตัวอักษร',args:['081-234-567A'],expected:''},{n:'ข้อความว่าง',args:[''],expected:''},{n:'+ อยู่กลาง',args:['081+2345678'],expected:''}],
+ sol:"function formatThaiMobile(text) {\n  let t = String(text).trim();\n  if (t.startsWith('+66')) { t = t.slice(3).trim(); if (t.startsWith('0')) return ''; t = '0' + t; }\n  if (!/^[0-9 -]+$/.test(t)) return '';\n  const d = t.replace(/[ -]/g, '');\n  if (!/^0[689]\\d{8}$/.test(d)) return '';\n  return d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6);\n}",
+ sample:'เขียนฟังก์ชัน formatThaiMobile(text) รับข้อความ คืนเบอร์มือถือไทยในรูปแบบ 0XX-XXX-XXXX (สามหลัก ขีด สามหลัก ขีด สี่หลัก) ถ้าไม่ถูกต้องให้คืนข้อความว่าง\nขั้นตอน:\n1. ตัดช่องว่างหน้าและหลังข้อความ\n2. ถ้าขึ้นต้นด้วยเครื่องหมายบวกตามด้วย 66 ให้ตัดส่วนนั้นออกและตัดช่องว่างที่ตามมา ถ้าตัวแรกที่เหลือเป็นเลขศูนย์ให้คืนข้อความว่าง ไม่งั้นเติมเลขศูนย์ไว้ข้างหน้า\n3. ข้อความที่เหลือต้องประกอบด้วยตัวเลข ช่องว่าง และขีดเท่านั้น ถ้ามีอักขระอื่น เช่น วงเล็บ ตัวอักษร หรือเครื่องหมายบวกที่ไม่ได้อยู่ต้นข้อความ ให้คืนข้อความว่าง\n4. ลบช่องว่างและขีดออก ต้องเหลือตัวเลขพอดี 10 หลัก และสองหลักแรกต้องเป็น 06, 08 หรือ 09 ไม่งั้นคืนข้อความว่าง\n5. คืนผลเป็นสามหลักแรก ขีด สามหลักถัดไป ขีด สี่หลักสุดท้าย\nตัวอย่าง: "0812345678" → "081-234-5678", "+66 81 234 5678" → "081-234-5678", "+66912345678" → "091-234-5678"\nต้องคืนข้อความว่าง: "021234567", "0712345678", "+660812345678", "(081) 234 5678", "081+2345678", ""'},
+{id:'pt4',title:'ปิดบังอีเมล (PDPA)',fn:'maskEmail',params:'email',
+ spec:'ฟังก์ชัน maskEmail(email) คืนอีเมลที่ปิดบังส่วนชื่อ หรือ "" ถ้ารูปแบบผิด\n1) ตัดช่องว่างหน้า/หลัง ต้องมี @ หนึ่งตัวพอดี ส่วนหน้า (local) และส่วนหลัง (domain) ต้องไม่ว่าง ห้ามมีช่องว่างภายใน และ domain ต้องมีจุดอย่างน้อยหนึ่งจุดที่ไม่อยู่หัวหรือท้าย\n2) local ยาว ≥ 3: คงตัวแรกและตัวสุดท้าย ตัวกลางแทนด้วย * จำนวนเท่าเดิม · ยาว 2: คงตัวแรก ตัวที่สองเป็น * · ยาว 1: เป็น *\n3) domain แปลงเป็นตัวพิมพ์เล็ก ส่วน local คงตัวพิมพ์เดิม',
+ tests:[
+  {n:'ปกติ',args:['somchai@example.com'],expected:'s*****i@example.com'},{n:'domain ตัวใหญ่',args:['Anan@Mail.CO.TH'],expected:'A**n@mail.co.th'},{n:'local 3 ตัว',args:['bob@x.io'],expected:'b*b@x.io'},
+  {n:'local 2 ตัว',args:['ab@x.io'],expected:'a*@x.io'},{n:'local 1 ตัว',args:['a@x.io'],expected:'*@x.io'},{n:'ช่องว่างหน้าหลัง',args:['  dao.p@corp.com '],expected:'d***p@corp.com'},
+  {n:'ไม่มี @',args:['somchai.example.com'],expected:''},{n:'@ สองตัว',args:['a@b@c.com'],expected:''},{n:'local ว่าง',args:['@x.io'],expected:''},
+  {n:'domain ไม่มีจุด',args:['user@localhost'],expected:''},{n:'domain จุดท้าย',args:['user@mail.'],expected:''},{n:'มีช่องว่างกลาง',args:['so mchai@x.io'],expected:''},{n:'ข้อความว่าง',args:[''],expected:''}],
+ sol:"function maskEmail(email) {\n  const t = String(email).trim();\n  const parts = t.split('@');\n  if (parts.length !== 2) return '';\n  const [local, domain] = parts;\n  if (!local || !domain || /\\s/.test(t)) return '';\n  const dot = domain.indexOf('.');\n  if (dot <= 0 || domain.endsWith('.')) return '';\n  const n = local.length;\n  const masked = n === 1 ? '*' : n === 2 ? local[0] + '*' : local[0] + '*'.repeat(n - 2) + local[n - 1];\n  return masked + '@' + domain.toLowerCase();\n}",
+ sample:'เขียนฟังก์ชัน maskEmail(email) ปิดบังชื่อในอีเมลตามนี้ ถ้ารูปแบบผิดให้คืนข้อความว่าง\n1. ตัดช่องว่างหน้าและหลังก่อน ถ้ายังมีช่องว่างอยู่ภายในให้คืนข้อความว่าง\n2. ต้องมีเครื่องหมาย @ หนึ่งตัวพอดี แบ่งเป็นส่วนชื่อ (ก่อน @) และโดเมน (หลัง @) ทั้งสองส่วนต้องไม่ว่าง\n3. โดเมนต้องมีจุดอย่างน้อยหนึ่งจุด และจุดนั้นต้องไม่ใช่ตัวแรกหรือตัวสุดท้ายของโดเมน\n4. ปิดบังส่วนชื่อ: ถ้ายาว 3 ตัวขึ้นไป ให้คงตัวแรกและตัวสุดท้าย ตัวตรงกลางทุกตัวเปลี่ยนเป็นดอกจันจำนวนเท่าเดิม ถ้ายาว 2 ตัว คงตัวแรกแล้วตัวที่สองเป็นดอกจัน ถ้ายาว 1 ตัว ให้เป็นดอกจันตัวเดียว ส่วนชื่อคงตัวพิมพ์เล็กใหญ่เดิม\n5. โดเมนแปลงเป็นตัวพิมพ์เล็กทั้งหมด\nตัวอย่าง: "somchai@example.com" → "s*****i@example.com", "Anan@Mail.CO.TH" → "A**n@mail.co.th", "ab@x.io" → "a*@x.io", "a@x.io" → "*@x.io"\nต้องคืนข้อความว่าง: "a@b@c.com", "@x.io", "user@localhost", "user@mail.", "so mchai@x.io"'},
+{id:'pt5',title:'แปลงข้อความจำนวนเงินเป็นตัวเลข',fn:'parseAmount',params:'text',
+ spec:'ฟังก์ชัน parseAmount(text) คืนจำนวนเงินเป็น number หรือ null ถ้ารูปแบบผิด\n1) ตัดช่องว่างหน้า/หลัง อาจมีสัญลักษณ์ "฿" นำหน้า หรือคำว่า "บาท" ต่อท้าย (มีช่องว่างคั่นได้) แต่ห้ามมีทั้งสองอย่างพร้อมกัน\n2) ตัวเลขเป็นจำนวนบวกหรือศูนย์ มีทศนิยมได้ไม่เกิน 2 ตำแหน่ง\n3) ใช้ comma คั่นหลักพันได้ แต่ต้องถูกตำแหน่งทุกกลุ่ม (กลุ่มแรก 1–3 หลัก กลุ่มถัดไป 3 หลักพอดี) หรือไม่ใช้ comma เลยก็ได้\n4) ห้ามเครื่องหมายลบ ห้ามเลขนำหน้าด้วย 0 เกินจำเป็น (เช่น 0012) แต่ 0.50 ได้',
+ tests:[
+  {n:'มี comma และทศนิยม',args:['1,234.50'],expected:1234.5},{n:'ไม่มี comma',args:['1234'],expected:1234},{n:'฿ นำหน้า',args:['฿1,000'],expected:1000},
+  {n:'บาท ต่อท้าย',args:['250 บาท'],expected:250},{n:'บาท ติดกัน',args:['99.99บาท'],expected:99.99},{n:'ล้าน',args:['1,000,000'],expected:1000000},
+  {n:'ศูนย์จุด',args:['0.50'],expected:0.5},{n:'ช่องว่างหน้าหลัง',args:['  ฿ 75 '],expected:75},{n:'ทั้ง ฿ และ บาท',args:['฿100 บาท'],expected:null},
+  {n:'comma ผิดตำแหน่ง',args:['12,34'],expected:null},{n:'ทศนิยม 3 ตำแหน่ง',args:['1.234'],expected:null},{n:'ติดลบ',args:['-50'],expected:null},
+  {n:'เลข 0 นำหน้า',args:['0012'],expected:null},{n:'ข้อความว่าง',args:[''],expected:null},{n:'มีตัวอักษร',args:['12a'],expected:null},{n:'กลุ่มแรก 4 หลัก',args:['1234,567'],expected:null}],
+ sol:"function parseAmount(text) {\n  let t = String(text).trim();\n  const hasSym = t.startsWith('฿'), hasWord = t.endsWith('บาท');\n  if (hasSym && hasWord) return null;\n  if (hasSym) t = t.slice(1).trim();\n  if (hasWord) t = t.slice(0, -3).trim();\n  const re = /^(?:0|[1-9]\\d{0,2}(?:,\\d{3})+|[1-9]\\d*)(?:\\.\\d{1,2})?$/;\n  if (!re.test(t)) return null;\n  return Number(t.replace(/,/g, ''));\n}",
+ sample:'เขียนฟังก์ชัน parseAmount(text) แปลงข้อความจำนวนเงินเป็นตัวเลข (number) ถ้ารูปแบบผิดให้คืน null\n1. ตัดช่องว่างหน้าและหลัง\n2. อาจมีสัญลักษณ์บาท (฿) อยู่หน้าสุด หรือคำว่า บาท อยู่ท้ายสุดอย่างใดอย่างหนึ่ง ถ้ามีทั้งสองอย่างให้คืน null ตัดสัญลักษณ์หรือคำนั้นออกพร้อมช่องว่างที่ติดกัน\n3. ส่วนที่เหลือต้องเป็นตัวเลขบวกหรือศูนย์เท่านั้น ห้ามเครื่องหมายลบหรือตัวอักษรอื่น\n4. ใช้จุลภาคคั่นหลักพันได้ ถ้าใช้ต้องถูกทุกกลุ่ม: กลุ่มแรก 1 ถึง 3 หลัก กลุ่มที่ตามมากลุ่มละ 3 หลักพอดี หรือจะไม่ใช้จุลภาคเลยก็ได้\n5. ทศนิยมมีได้ไม่เกิน 2 ตำแหน่ง\n6. ห้ามมีเลขศูนย์นำหน้าเกินจำเป็น เช่น 0012 ผิด แต่ 0 หรือ 0.50 ถูก\n7. คืนค่าเป็นตัวเลขหลังลบจุลภาคออก\nตัวอย่าง: "1,234.50" → 1234.5, "฿1,000" → 1000, "250 บาท" → 250, "99.99บาท" → 99.99, "0.50" → 0.5\nต้องคืน null: "฿100 บาท", "12,34", "1234,567", "1.234", "-50", "0012", "12a", ""'}
+);
 
 /* ================= POST-TEST (ข้อใหม่ต่อบท ใช้ร่วมกับข้อ pre-test ตอนทำ post-test) ================= */
 const POST = {
@@ -1017,6 +1452,148 @@ algo:[
 ]
 };
 
+/* ================= คลังข้อสอบฝึก (BANK) — ข้อใหม่ต่อบท ใช้ในโหมด "ฝึกปรนัย" =================
+   หลักการเขียน: ข้อถูกยาวปานกลาง (รายละเอียดอยู่ใน e) ข้อหลอกเป็นความเข้าใจผิดที่พบจริงและยาวพอ ๆ กัน
+   ตรวจด้วย node src/tests/bias.js */
+const BANK = {
+sysd:[
+ {q:'ระบบ URL shortener ต้องรองรับ 10,000 redirect/วินาที แต่สร้างลิงก์ใหม่แค่ 50/วินาที ส่วนที่ควรออกแบบให้ scale ก่อนคือ',o:['ฝั่งเขียน: ใช้ distributed lock ตอนสร้าง short id','ฝั่งอ่าน: cache/CDN ข้อมูล redirect','ฝั่งเขียน: แยก service สร้าง id ออกไปเป็นอีกตัว','ทั้งสองฝั่งเท่ากัน เพราะใช้ฐานข้อมูลตัวเดียวกัน'],a:1,e:'อ่าน:เขียน = 200:1 คอขวดอยู่ที่การอ่าน cache (Redis) หรือ CDN ลดโหลดฐานข้อมูลได้มากที่สุด'},
+ {q:'ต้องการให้ระบบยังให้บริการได้เมื่อทั้ง Availability Zone หนึ่งล่ม ควรออกแบบอย่างไร',o:['เพิ่มจำนวน instance ใน AZ เดิมเป็นสองเท่า','กระจาย instance และ DB replica ข้ามหลาย AZ','ย้ายไปเครื่องใหญ่ขึ้นหนึ่งเครื่องใน AZ ที่เสถียรที่สุดของ region','ตั้ง auto-restart ให้ทุก instance ใน AZ เดิม'],a:1,e:'ความทนทานระดับ AZ ต้องกระจายทั้ง compute และข้อมูลไปอย่างน้อย 2 AZ หลัง load balancer'},
+ {q:'ทีม 5 คนเพิ่งเริ่มผลิตภัณฑ์ใหม่ที่โดเมนยังเปลี่ยนบ่อย ควรเริ่มด้วยสถาปัตยกรรมใด',o:['microservices ตั้งแต่วันแรกเพื่อรองรับการเติบโตในอนาคต','modular monolith แล้วค่อยแยกเมื่อจำเป็น','serverless function แยกทุก endpoint','microservices แต่ใช้ฐานข้อมูลร่วมกัน'],a:1,e:'microservices เพิ่มต้นทุน ops และ coordination มาก modular monolith ที่แบ่ง module ชัดแยกเป็น service ทีหลังได้'},
+ {q:'Load balancer แบบ Layer 7 ทำอะไรได้ที่ Layer 4 ทำไม่ได้',o:['กระจาย TCP connection แบบ round robin','route ตาม path หรือ header ของ HTTP','รองรับจำนวน connection พร้อมกันได้มากกว่ามาก','ทำ health check ตาม port ของ backend'],a:1,e:'L7 เข้าใจ HTTP จึง route ตามเนื้อหา เช่น /api ไป service หนึ่ง /img ไปอีกตัว'},
+ {q:'ระบบส่ง notification ต้องไม่หายและไม่ส่งซ้ำ แม้ worker crash กลางทาง แนวทางใดถูกต้อง',o:['ตั้ง broker เป็น at-most-once เพื่อไม่ให้มีการส่งซ้ำ','at-least-once + จำ id ที่ส่งแล้ว','ให้ worker ตัวเดียวประมวลผลทั้งหมดตามลำดับ','ack message ทันทีที่ได้รับก่อนเริ่มส่งจริง'],a:1,e:'at-most-once อาจทำ message หาย at-least-once + idempotency (จำ notification id) จึงไม่หายและไม่ซ้ำ'},
+ {q:'C4 model ระดับใดแสดง "แอปและบริการที่ deploy แยกกัน เช่น web app, API, database" ของระบบหนึ่ง',o:['System Context','Container','Component','Code'],a:1,e:'Container = หน่วยที่รัน/deploy แยก ส่วน Component = ส่วนประกอบภายใน container'}
+],
+db:[
+ {q:'query รายงานรายเดือนช้า plan แสดง Index Scan บน index (customer_id) ทั้งที่ WHERE กรอง created_at ช่วงหนึ่งเดือน ควรทำอะไรก่อน',o:['สร้าง index ที่ขึ้นต้นด้วย created_at','rebuild index customer_id ทุกคืนให้สถิติเป็นปัจจุบัน','เพิ่ม RAM ให้ฐานข้อมูลเก็บตารางใน memory ได้ทั้งหมด','เปลี่ยนเป็น SELECT * เพื่อใช้ plan cache'],a:0,e:'index ที่ไม่ขึ้นต้นด้วยคอลัมน์ที่กรองถูก scan ทั้งก้อน ควรมี index (created_at) หรือ composite ที่ขึ้นต้นด้วยคอลัมน์นั้น'},
+ {q:'ตาราง order_items มี PK (order_id, product_id) และเก็บ product_name ซึ่งขึ้นกับ product_id อย่างเดียว ละเมิด normal form ใด',o:['1NF','2NF','3NF','BCNF เท่านั้น'],a:1,e:'คอลัมน์ขึ้นกับ PK บางส่วน (partial dependency) = ผิด 2NF'},
+ {q:'connection pool ขนาด 100 เกิด "pool exhausted" ช่วงพีค ทั้งที่ CPU ของฐานข้อมูลยังว่าง สาเหตุที่น่าเป็นที่สุดคือ',o:['ฐานข้อมูลรับ connection พร้อมกันได้ไม่ถึง 100','โค้ดยืม connection แล้วไม่คืนหรือถือไว้นาน','index ไม่พอ ทำให้ query ใช้ CPU สูงจนต้องรอคิว','ตั้ง pool ใหญ่เกินไปจนฐานข้อมูลสลับงานช้า'],a:1,e:'connection leak (ไม่ dispose) หรือถือ connection ไว้ระหว่างรอ I/O ภายนอก ทำให้ pool หมดโดยที่ DB ไม่ได้ทำงานหนัก'},
+ {q:'ต้องการค้นหาสินค้าจากชื่อแบบพิมพ์ผิดได้ และจัดอันดับความเกี่ยวข้อง ควรใช้อะไร',o:["LIKE '%คำ%' บนคอลัมน์ name",'search engine (Elasticsearch ฯลฯ)','B-tree index บนคอลัมน์ name แบบ case-insensitive','ตาราง cache ผลค้นหาคำยอดนิยม'],a:1,e:'fuzzy search และ relevance ranking เป็นงานของ search engine เช่น Elasticsearch / Azure AI Search'},
+ {q:'Soft delete (คอลัมน์ is_deleted) มีผลข้างเคียงใดที่ต้องระวัง',o:['ข้อมูลจะถูกลบถาวรทันทีโดยไม่ตั้งใจ','ต้องกรองทุก query และ unique key อาจชน','foreign key ทั้งหมดจะใช้งานไม่ได้อีกต่อไป','ทำให้ต้องย้ายฐานข้อมูลไปเป็น NoSQL'],a:1,e:'ลืมกรองทำให้ข้อมูลที่ลบโผล่ และ unique index ต้องคิดรวม is_deleted (เช่น filtered index)'},
+ {q:'ให้ยอดเงินไม่ติดลบแม้มีการถอนพร้อมกันหลาย request วิธีใดถูกต้องที่สุด',o:['อ่านยอดก่อน แล้ว UPDATE อีก query ถ้ายอดพอ','UPDATE … WHERE balance >= @x แล้วตรวจจำนวนแถว','ตรวจยอดคงเหลือฝั่ง client ก่อนส่ง request','ตั้ง READ UNCOMMITTED ให้เห็นยอดล่าสุดเสมอ'],a:1,e:'เงื่อนไขอยู่ใน UPDATE เดียวจึง atomic ไม่เกิด race ระหว่างอ่านกับเขียน ถ้าแถวที่ถูกแก้ = 0 แปลว่ายอดไม่พอ'}
+],
+micro:[
+ {q:'A เรียก B, B เรียก C แบบ synchronous ทุก request ช้าและล่มเป็นทอด ๆ ทางออกเชิงสถาปัตยกรรมที่ลด coupling ได้มากที่สุด',o:['เพิ่ม timeout ให้ทุก hop เป็น 60 วินาที','เปลี่ยนส่วนที่ไม่ต้องรอผลเป็น async event','รวม A, B, C เป็น service เดียวกันทันที','ให้ A เรียก C ตรงโดยข้าม B ไปเลย'],a:1,e:'async event ตัด temporal coupling ของส่วนที่ไม่ต้องตอบทันที'},
+ {q:'Bulkhead pattern ช่วยเรื่องใด',o:['แยก resource ต่อปลายทาง ไม่ให้ตัวหนึ่งกินหมด','รวม request หลายตัวเป็น batch เดียวก่อนส่ง','แปลง protocol ระหว่าง service ที่ต่างกัน','เข้ารหัสข้อมูลระหว่าง service ภายใน cluster'],a:0,e:'เหมือนผนังกั้นห้องเรือ เช่นแยก thread pool ต่อปลายทาง ปลายทางหนึ่งช้าก็ไม่ลากทั้งระบบ'},
+ {q:'service ต้องรู้ address ของ service อื่นที่ scale ขึ้นลงตลอดเวลาใน Kubernetes ใช้กลไกใด',o:['เขียน IP ของ pod ลงใน config ตอน deploy','DNS ของ Kubernetes Service','ให้ทุก service broadcast หากันทุก 5 วินาที','ไฟล์ hosts ที่ build ติดไปกับ image'],a:1,e:'Kubernetes Service ให้ชื่อ DNS คงที่ และกระจายไปยัง pod ที่ healthy'},
+ {q:'ทีมแยก service ตามเลเยอร์ (UI, logic, data) แล้วทุกฟีเจอร์ต้องแก้ทั้ง 3 service ปัญหาคือ',o:['ควรแยกตาม business capability แทน','ควรเพิ่ม service ชั้นที่ 4 สำหรับ validation','ควรเขียนทุก service ด้วยภาษาเดียวกัน','ควรรวม data service เข้า logic service อย่างเดียว'],a:0,e:'แยกตามเลเยอร์เทคนิคทำให้ coupling สูง แยกตาม bounded context ให้ฟีเจอร์อยู่ใน service เดียว'},
+ {q:'Event ควรมีข้อมูลมากแค่ไหน',o:['ใส่เฉพาะ id เสมอ ให้ผู้รับเรียก API กลับมาดึงเอง','ใส่ข้อมูลที่ผู้รับต้องใช้ ไม่ใช่ทั้ง entity','ใส่ทั้ง entity และประวัติการแก้ไขทั้งหมดทุกครั้ง','ใส่ SQL ที่ใช้สร้างข้อมูลนั้นให้ผู้รับรันเอง'],a:1,e:'ใส่ id อย่างเดียวทำให้ต้องเรียกกลับ (coupling) ใส่ทั้งหมดทำให้ event ใหญ่และผูก schema'},
+ {q:'Strangler fig pattern ใช้ทำอะไร',o:['ค่อย ๆ ย้ายฟีเจอร์จากระบบเก่าไประบบใหม่','ปิดระบบเก่าแล้วเปิดระบบใหม่ทั้งหมดในวันเดียว','ทดสอบความทนทานด้วยการตัด network แบบสุ่ม','แบ่ง thread pool ต่อปลายทางเพื่อกัน cascade'],a:0,e:'วาง routing layer ด้านหน้า ย้ายทีละส่วนจนระบบเก่าไม่เหลือ ลดความเสี่ยงของ big-bang rewrite'}
+],
+git:[
+ {q:'ต้องการรวม 5 commit เล็ก ๆ ใน feature branch (ยังไม่ push) ให้เป็น commit เดียวก่อนเปิด PR',o:['git merge --squash main','git rebase -i แล้ว squash','git reset --hard HEAD~5','git cherry-pick HEAD~5..HEAD'],a:1,e:'interactive rebase จัดเรียงและรวม commit ใน branch ของเราเองได้'},
+ {q:'ทำงานค้างอยู่ แต่ต้องสลับไปแก้บั๊กด่วนในอีก branch โดยยังไม่อยาก commit',o:['git stash แล้ว stash pop ภายหลัง','git reset --hard แล้วค่อยเขียนใหม่ทีหลัง','git commit --amend ทับ commit ล่าสุดไปก่อน','git clean -fd ก่อนสลับ branch'],a:0,e:'stash เก็บการแก้ไขชั่วคราวโดยไม่สร้าง commit'},
+ {q:'PR มี merge conflict ใน appsettings.json วิธีที่ถูกต้องคือ',o:['เลือกเวอร์ชันของเราทั้งไฟล์ เพราะเราแก้ล่าสุด','รวมทั้งสองฝั่งให้ครบ แล้ว build/test','ลบไฟล์แล้วสร้างใหม่จาก template ของโปรเจกต์','force push ทับ branch ปลายทางให้จบ'],a:1,e:'conflict ต้องเข้าใจเจตนาของทั้งสองฝั่ง และยืนยันด้วย build/test ก่อน commit'},
+ {q:'Branch protection ที่ควรเปิดบน main ของทีมคือข้อใด',o:['อนุญาตให้ทุกคน force push เพื่อแก้ history ได้','ต้องผ่าน PR + reviewer + status check','ปิด CI บน main เพื่อให้ merge ได้เร็วขึ้น','อนุญาตให้ merge ได้เฉพาะหัวหน้าทีมคนเดียว'],a:1,e:'กันโค้ดที่ยังไม่ review หรือไม่ผ่าน test เข้า main'},
+ {q:'git reset --soft HEAD~1 ทำอะไร',o:['ลบ commit ล่าสุดพร้อมการแก้ไขทั้งหมด','ย้อน commit แต่เก็บการแก้ไขไว้ใน staging','สร้าง commit ใหม่ที่กลับค่า commit ล่าสุด','ดึง commit ล่าสุดจาก remote มาใหม่'],a:1,e:'--soft คงไฟล์และ staging, --mixed คงไฟล์แต่ unstage, --hard ลบทิ้ง'},
+ {q:'Semantic Versioning: เปลี่ยน API แบบทำให้ client เดิมพัง จาก 2.4.1 ควรเป็นเวอร์ชันใด',o:['2.4.2','2.5.0','3.0.0','2.4.1-break'],a:2,e:'MAJOR = breaking, MINOR = เพิ่มฟีเจอร์ที่เข้ากันได้, PATCH = แก้บั๊ก'}
+],
+oop:[
+ {q:'CalculateDiscount(Customer c) มี if/else ตามประเภทลูกค้า 6 ประเภท และเพิ่มบ่อย ควร refactor เป็นอะไร',o:['Strategy: IDiscountPolicy ต่อประเภท','เพิ่ม enum และ switch ที่ครอบคลุมทุกกรณี','ย้าย if/else ไปไว้ใน static helper class','ให้ Customer สืบทอดจาก DiscountService'],a:0,e:'Strategy ทำให้เพิ่มประเภทใหม่ได้โดยไม่แก้โค้ดเดิม (OCP) เลือก policy ผ่าน DI หรือ registry'},
+ {q:'Value object (เช่น Money, Email) ควรมีคุณสมบัติใด',o:['มี id ประจำตัวและแก้ไขค่าได้ตลอดอายุ','immutable และเท่ากันเมื่อค่าเท่ากัน','เป็น singleton หนึ่งตัวต่อทั้งระบบ','ต้องเก็บในตารางแยกของตัวเองเสมอ'],a:1,e:'value object ไม่มี identity เปรียบเทียบด้วยค่า และไม่ควรถูกแก้หลังสร้าง'},
+ {q:'ใน C# ต้องการให้ object แจ้งเมื่อสถานะเปลี่ยน โดยไม่ผูกกับผู้รับโดยตรง',o:['Observer (event/delegate)','Singleton (static instance)','Builder (fluent API)','Prototype (clone)'],a:0,e:'event ใน C# คือ Observer pattern ผู้ส่งไม่ต้องรู้จักผู้รับ'},
+ {q:'Builder pattern เหมาะกับสถานการณ์ใด',o:['object ที่มีพารามิเตอร์ทางเลือกจำนวนมาก','ต้องการให้มี instance เดียวทั้งระบบ','แปลง interface หนึ่งเป็นอีกแบบที่ระบบใช้','แจ้งผู้สนใจทุกครั้งที่ state เปลี่ยน'],a:0,e:'แก้ปัญหา constructor ยาว (telescoping constructor) และตรวจความถูกต้องก่อนสร้าง'},
+ {q:'ใน ASP.NET Core service ที่เก็บ state ของแต่ละ request ควรใช้ lifetime ใด',o:['Singleton','Scoped','Transient ที่เก็บค่าใน static field','Singleton พร้อม lock ทุก method'],a:1,e:'Scoped = หนึ่ง instance ต่อ request เหมาะกับ state ระดับ request เช่น DbContext'},
+ {q:'"Tell, Don\'t Ask" หมายถึงอะไร',o:['สั่งให้ object ทำงานกับข้อมูลของตัวเอง','ให้ทุก method ถามผู้ใช้ยืนยันก่อนทำงาน','ห้ามมี getter ใน class ใด ๆ เลย','ให้ใช้ exception แทน return value'],a:0,e:'ลด logic ที่กระจายอยู่นอก object (feature envy) และรักษา encapsulation'}
+],
+test:[
+ {q:'test หลายสิบตัวพังทุกครั้งที่แก้ constructor ของ class หนึ่ง เพราะทุก test new object เอง ควรแก้อย่างไร',o:['ใช้ test data builder กลาง','copy constructor ใหม่ไปแก้ในทุก test ทีละไฟล์','ลบ test ที่พังออกแล้วเขียนใหม่ภายหลัง','เปลี่ยน constructor เป็น public field ทั้งหมด'],a:0,e:'จุดสร้าง object เดียวทำให้แก้ที่เดียว และ test อ่านง่ายขึ้น'},
+ {q:'Mutation testing วัดอะไร',o:['ความเร็วในการรัน test ทั้งชุด','ว่า test จับการแก้โค้ดเล็ก ๆ ได้หรือไม่','จำนวนบรรทัดที่ถูกรันระหว่าง test','จำนวน test ที่ผล flaky ในรอบหนึ่งเดือน'],a:1,e:'ถ้าแก้โค้ด (mutant) แล้ว test ยังผ่าน แปลว่า assertion ไม่ได้ตรวจส่วนนั้นจริง'},
+ {q:'ต้องทดสอบ API ASP.NET Core ทั้ง pipeline (routing, middleware, DI) โดยไม่ deploy จริง',o:['WebApplicationFactory','Moq mock controller ทุกตัวแล้วเรียกตรง','Selenium เปิดเบราว์เซอร์ไปที่ API','Postman collection ที่รันด้วยมือ'],a:0,e:'WebApplicationFactory (Microsoft.AspNetCore.Mvc.Testing) รันแอปในหน่วยความจำและให้ HttpClient เรียกได้'},
+ {q:'BDD (Given-When-Then) ช่วยทีมเรื่องใดมากที่สุด',o:['ทำให้ test รันเร็วขึ้นกว่า unit test','ให้ business, QA, dev ใช้ภาษาเดียวกัน','ใช้แทน unit test ได้ทั้งหมด','ลด coverage ขั้นต่ำที่ต้องการ'],a:1,e:'scenario ที่อ่านได้ทุกฝ่ายกลายเป็น acceptance test'},
+ {q:'unit test ของ method ที่อ่านไฟล์จากดิสก์ ควรทำอย่างไร',o:['อ่านไฟล์จริงจากโฟลเดอร์บนเครื่อง dev','แยกเป็น interface แล้ว stub ใน test','ปิดการทดสอบส่วนนี้ไว้ก่อน','ใส่ Thread.Sleep รอให้ไฟล์พร้อม'],a:1,e:'unit test ไม่ควรพึ่ง I/O จริง แยก dependency (เช่น IFileSystem) เพื่อควบคุมได้'},
+ {q:'test ใน pipeline ใช้เวลา 40 นาที ทำให้ทีม merge ช้า สิ่งแรกที่ควรพิจารณา',o:['ปิด test ทั้งหมดในขั้น PR','แยกชุด: unit ทุก PR, ที่ช้ารันขนาน','รัน test เฉพาะวันศุกร์ก่อน release','ลดจำนวน assertion ในทุก test ลง'],a:1,e:'feedback ใน PR ต้องเร็ว ส่วน integration/E2E ที่ช้ารันขนานหรือตามรอบโดยไม่ทิ้ง'}
+],
+mon:[
+ {q:'p50 latency 120ms แต่ p99 4 วินาที หมายความว่าอะไร',o:['ส่วนใหญ่เร็ว แต่ 1% ช้ามาก','ทุก request ช้าพอ ๆ กันที่ประมาณ 2 วินาที','ค่าเฉลี่ยของทุก request คือ 4 วินาที','ไม่ต้องสนใจ เพราะ p50 อยู่ในเกณฑ์ดี'],a:0,e:'ค่ากลางซ่อนผู้ใช้ที่เจอปัญหา p99 สะท้อน tail latency ที่ต้องหาสาเหตุ'},
+ {q:'Burn-rate alert ของ SLO ดีกว่า alert แบบ error rate คงที่อย่างไร',o:['เตือนตามความเร็วที่ใช้ error budget','เตือนทุกครั้งที่มี error แม้แต่ครั้งเดียว','ไม่ต้องกำหนด SLO ก่อนก็ใช้งานได้','รวมสรุปเตือนครั้งเดียวตอนสิ้นเดือน'],a:0,e:'จับปัญหาใหญ่ได้เร็วและลด alert รบกวน มักใช้หลายหน้าต่างเวลา เช่น 1h/6h'},
+ {q:'OpenTelemetry มีบทบาทอะไร',o:['มาตรฐานเก็บ traces/metrics/logs ส่งได้ทุก backend','ฐานข้อมูล time-series สำหรับเก็บ log และ metric ระยะยาว','เครื่องมือทำ load test แบบกระจายหลายเครื่อง','firewall สำหรับ API ภายในองค์กร'],a:0,e:'vendor-neutral instrumentation: SDK + collector'},
+ {q:'log มีปริมาณมากจนค่าใช้จ่ายสูง วิธีที่สมเหตุสมผลคือ',o:['ปิด log ทั้งหมดบน production','ลด level ที่ไม่จำเป็น, sampling, retention','เก็บทุกอย่างเป็น Debug แต่บีบอัดก่อนส่ง','ส่ง log ทางอีเมลแทนการเก็บในระบบ'],a:1,e:'คุมทั้งปริมาณและระยะเวลาเก็บ โดยยังเก็บสิ่งที่ต้องใช้ debug'},
+ {q:'RED method สำหรับ service ประกอบด้วยอะไร',o:['Rate, Errors, Duration','RAM, Errors, Disk','Requests, Events, Deployments','Retries, Exceptions, Downtime'],a:0,e:'ใช้กับ request-driven service ส่วน USE (Utilization, Saturation, Errors) ใช้กับ resource'},
+ {q:'Synthetic monitoring ต่างจาก Real User Monitoring (RUM) อย่างไร',o:['synthetic = สคริปต์ทดสอบ, RUM = ผู้ใช้จริง','synthetic = ผู้ใช้จริง, RUM = สคริปต์ทดสอบ','ทั้งคู่วัด CPU และ memory ของ server','RUM ใช้ได้เฉพาะ mobile app เท่านั้น'],a:0,e:'synthetic จับปัญหาได้แม้ไม่มีผู้ใช้ RUM สะท้อนประสบการณ์จริง'}
+],
+fe:[
+ {q:'React component re-render บ่อยเพราะส่ง object/array ที่สร้างใหม่ทุก render เป็น prop ควรทำอย่างไร',o:['useMemo/useCallback + React.memo','ย้ายทุก state ไปไว้ใน global store เดียว','ใช้ index ของ array เป็น key ของ list','เปลี่ยนเป็น class component ทั้งหมด'],a:0,e:'reference ใหม่ทุก render ทำให้ child คิดว่า prop เปลี่ยน'},
+ {q:'ใช้ index เป็น key ใน list ที่เพิ่ม/ลบ/เรียงลำดับได้ จะเกิดปัญหาอะไร',o:['ไม่มีปัญหา เพราะ index ไม่ซ้ำกันอยู่แล้ว','state ของแถวอาจผูกผิดแถวเมื่อลำดับเปลี่ยน','React จะ throw error ทันทีตอน render','list จะแสดงซ้ำสองชุดทุกครั้ง'],a:1,e:'key ควรเป็น id ที่คงที่ของข้อมูล'},
+ {q:'ฟอร์มที่ส่งข้อมูลสำคัญควร validate ที่ใด',o:['ฝั่ง client อย่างเดียว เพราะเห็นผลทันที','ทั้ง client (UX) และ server (ความปลอดภัย)','ฝั่ง server อย่างเดียว client ไม่ต้องมี','ฐานข้อมูลอย่างเดียวด้วย constraint'],a:1,e:'client validation ข้ามได้เสมอ server ต้องตรวจซ้ำ'},
+ {q:'ปุ่มที่มีแต่ไอคอนไม่มีข้อความ ทำให้ accessible อย่างไร',o:['ใส่ aria-label','เปลี่ยนสีไอคอนให้ตัดกับพื้นหลังมากขึ้น','ใส่ title ให้รูปไอคอนอย่างเดียว','ไม่ต้องทำ เพราะผู้ใช้ส่วนใหญ่เห็นไอคอน'],a:0,e:'screen reader ต้องมี accessible name (aria-label หรือข้อความที่ซ่อนด้วย CSS)'},
+ {q:'Micro-frontend เหมาะกับสถานการณ์ใด',o:['ทีมเดียวทำเว็บเล็ก ๆ หน้าเดียว','หลายทีมดูแลคนละส่วน และต้อง deploy แยก','ต้องการให้ bundle เล็กที่สุดในทุกกรณี','ต้องการให้ SEO ดีขึ้นแบบอัตโนมัติ'],a:1,e:'แลกความซับซ้อนกับความเป็นอิสระของทีม ไม่คุ้มสำหรับทีมเล็ก'},
+ {q:'debounce กับ throttle ต่างกันอย่างไร',o:['debounce รอให้หยุดก่อน, throttle จำกัดความถี่','debounce ทำทันทีทุกครั้ง, throttle ไม่ทำเลย','เหมือนกัน ต่างแค่ชื่อในแต่ละ library','throttle ใช้กับ network, debounce ใช้กับ CPU'],a:0,e:'ช่องค้นหาใช้ debounce, scroll/resize handler ใช้ throttle'}
+],
+api:[
+ {q:'API คืน list ของ order 10,000 รายการทุกครั้ง ทำให้ช้าและหนัก ควรออกแบบอย่างไร',o:['บังคับ pagination + filter/sort','เพิ่ม timeout ฝั่ง client ให้รอได้นานขึ้น','บีบอัด response ด้วย gzip อย่างเดียวก็พอ','ให้ client ดึงทั้งหมดครั้งเดียวแล้ว cache ไว้'],a:0,e:'จำกัดขนาด response (limit สูงสุด) และให้ client ขอเฉพาะที่ต้องใช้'},
+ {q:'versioning แบบใดที่ client เดิมไม่ต้องเปลี่ยนเมื่อมีเวอร์ชันใหม่',o:['เปลี่ยน /v1 ให้ทำงานแบบใหม่ทันที','คง /v1 ออก /v2 คู่กัน และประกาศ sunset','ลบ /v1 ทันทีที่ /v2 พร้อมใช้งาน','ให้ client เดาเวอร์ชันจากรูปแบบ response'],a:1,e:'ให้เวลา client ย้าย และสื่อสารวันปิดชัดเจน (header Deprecation/Sunset)'},
+ {q:'ETag + If-None-Match ช่วยเรื่องใด',o:['ตอบ 304 เมื่อข้อมูลไม่เปลี่ยน','เข้ารหัส response ระหว่างทาง','ยืนยันตัวตนผู้ใช้ทุก request','จำกัดจำนวน request ต่อนาที'],a:0,e:'conditional request ประหยัด bandwidth และใช้ ETag กับ If-Match ทำ optimistic concurrency ได้'},
+ {q:'error response ของ API ควรมีรูปแบบอย่างไร',o:['คืน 200 พร้อม field message ว่า error','status ที่ถูกต้อง + Problem Details','คืน stack trace เต็มให้ client debug','คืน 500 ทุกกรณีที่ผิดพลาด'],a:1,e:'RFC 9457 Problem Details (type, title, status, detail) ทำให้ client จัดการ error ได้สม่ำเสมอ'},
+ {q:'Webhook ที่ส่งไปหาลูกค้าควรออกแบบอย่างไรให้เชื่อถือได้',o:['ส่งครั้งเดียว ถ้าไม่สำเร็จก็ข้ามไป','HMAC signature + retry backoff + event id','ส่งผ่าน HTTP ธรรมดาเพื่อความเร็ว','ส่งข้อมูลทั้งหมดของบัญชีทุกครั้ง'],a:1,e:'ผู้รับต้องตรวจที่มาได้ และรับซ้ำได้อย่างปลอดภัย (dedupe ด้วย id)'},
+ {q:'gRPC เหมาะกว่า REST/JSON ในกรณีใด',o:['public API ที่เบราว์เซอร์เรียกโดยตรง','สื่อสารภายในระหว่าง service ที่ต้องการความเร็ว','API ที่ต้อง cache ผ่าน CDN สาธารณะ','เมื่อต้องการให้มนุษย์อ่าน payload ได้ง่าย'],a:1,e:'binary (protobuf) + HTTP/2 + contract ชัด + streaming แต่เบราว์เซอร์เรียกตรงยาก'}
+],
+sec:[
+ {q:'ผู้ใช้อัปโหลดไฟล์ชื่อ "../../appsettings.json" แล้ว server บันทึกตามชื่อที่ส่งมา ช่องโหว่นี้คือ',o:['Stored XSS','Path traversal','SSRF','Open redirect'],a:1,e:'ต้องตั้งชื่อไฟล์เองฝั่ง server (เช่น GUID) และเก็บนอก web root ไม่ใช้ชื่อจากผู้ใช้'},
+ {q:'Refresh token ควรจัดการอย่างไรให้ปลอดภัย',o:['อายุไม่จำกัด เก็บใน localStorage','rotation: ใช้ครั้งเดียวแล้วออกใหม่','ส่งไปพร้อม access token ทุก request','ใช้ refresh token เป็น API key ถาวร'],a:1,e:'refresh token rotation + ตรวจจับการใช้ซ้ำ (reuse detection) และเก็บใน HttpOnly cookie'},
+ {q:'Least privilege หมายถึงอะไรในการตั้งค่า service account',o:['ให้สิทธิ์ admin เพื่อไม่ให้งานติดขัด','ให้เฉพาะสิทธิ์ที่จำเป็นต่องานนั้น','ใช้ account เดียวร่วมกันทุก service','ให้สิทธิ์ตามตำแหน่งของคนที่สร้าง'],a:1,e:'ลดผลกระทบเมื่อ credential รั่ว'},
+ {q:'error page บน production แสดง stack trace และ connection string เป็นปัญหาแบบใด',o:['Security misconfiguration / information disclosure','Broken access control ระดับ object ของ API','Insecure direct object reference (IDOR)','Server-side request forgery ผ่านหน้า error'],a:0,e:'ต้องแสดงข้อความทั่วไปและ log รายละเอียดฝั่ง server เท่านั้น'},
+ {q:'Threat modeling แบบ STRIDE ควรทำเมื่อใด',o:['หลัง go-live เมื่อมีเหตุการณ์','ช่วงออกแบบ ก่อนเริ่มพัฒนา','เฉพาะเมื่อ pentest พบช่องโหว่','ทุกครั้งที่มีการ deploy hotfix'],a:1,e:'แก้ปัญหาตอนออกแบบถูกที่สุด STRIDE = Spoofing, Tampering, Repudiation, Information disclosure, DoS, Elevation of privilege'},
+ {q:'API key ของบริการภายนอกที่แอปใช้ ควรเก็บที่ใด',o:['ในโค้ดเป็นค่าคงที่','secret store เช่น Key Vault','appsettings.json ที่ commit ไว้','ในฐานข้อมูลแบบ plain text'],a:1,e:'อ่านผ่าน Managed Identity ไม่อยู่ใน repo และ rotate ได้'}
+],
+cont:[
+ {q:'container ถูก kill บ่อยด้วยสถานะ OOMKilled บน Kubernetes สาเหตุหลักคือ',o:['CPU limit ต่ำเกินไป','ใช้ memory เกิน limit ที่ตั้งไว้','image ใหญ่เกินกว่าที่ node รองรับ','liveness probe ตั้งถี่เกินไป'],a:1,e:'ต้องดู memory usage จริง ปรับ limit/requests หรือแก้ memory leak'},
+ {q:'requests กับ limits ของ resource ใน Kubernetes ต่างกันอย่างไร',o:['เหมือนกัน แค่ชื่อเรียกต่างกัน','requests ใช้จัดวาง pod, limits คือเพดาน','limits ใช้จัดวาง pod, requests คือเพดาน','requests ใช้กับ CPU, limits ใช้กับ memory'],a:1,e:'scheduler ใช้ requests เลือก node ส่วน limits บังคับไม่ให้ใช้เกิน (memory เกิน = OOMKilled)'},
+ {q:'ต้องการให้ image เล็กและมีช่องโหว่น้อยที่สุดสำหรับ .NET API ควรใช้ base image แบบใด',o:['sdk image เต็มรูปแบบ','runtime image แบบ slim/chiseled','ubuntu:latest แล้วติดตั้ง .NET เอง','windows server core'],a:1,e:'image ที่มีเฉพาะ runtime ลดขนาดและ attack surface'},
+ {q:'docker compose เหมาะกับงานใด',o:['รัน production ข้ามหลายร้อยเครื่องพร้อม autoscale','รันหลาย container ร่วมกันในเครื่อง dev/test','build image แทนการเขียน Dockerfile','จัดการ secret ของ production ทุก environment'],a:1,e:'เช่น API + DB + Redis บนเครื่องเดียว ส่วน production ใช้ orchestrator'},
+ {q:'ConfigMap กับ Secret ใน Kubernetes ใช้ต่างกันอย่างไร',o:['ConfigMap สำหรับค่าทั่วไป, Secret สำหรับค่าลับ','ConfigMap เข้ารหัสแข็งแรงกว่า Secret','Secret ใช้เก็บไฟล์ image ของแอป','ใช้แทนกันได้ทุกกรณี'],a:0,e:'Secret แค่ base64 โดยปริยาย ควรเปิด encryption at rest หรือใช้ external secret store'},
+ {q:'Rolling update ใน Kubernetes deployment ทำงานอย่างไร',o:['ลบ pod เก่าทั้งหมดก่อนแล้วสร้างใหม่','ทยอยแทน pod เก่าด้วยใหม่ตาม readiness','สร้าง cluster ใหม่ทั้งชุดแล้วสลับ DNS','หยุด traffic ทั้งหมดระหว่างอัปเดต'],a:1,e:'คุมด้วย maxSurge/maxUnavailable และรอ readiness probe ก่อนส่ง traffic'}
+],
+cicd:[
+ {q:'pipeline ควรรัน security scan แบบใดบ้างตั้งแต่ขั้น PR',o:['ไม่ต้อง รอ pentest ปลายปีพอ','SAST + dependency (SCA) + secret scan','เฉพาะ DAST บน production หลังผู้ใช้เริ่มใช้งาน','เฉพาะ scan image หลัง deploy แล้ว'],a:1,e:'shift-left: จับปัญหาก่อน merge DAST/pentest ทำเพิ่มในขั้นหลัง'},
+ {q:'ต้องการให้ deploy ขึ้น production ต้องมีคนอนุมัติ แต่ dev/UAT ไม่ต้อง ทำใน Azure DevOps อย่างไร',o:['ให้ทุกคนรอ email แล้วกด deploy เอง','environment ของ Prod ที่มี approval check','สร้าง pipeline แยกที่ไม่มีการ build','ปิด trigger อัตโนมัติทุก stage'],a:1,e:'approvals and checks ผูกกับ environment ใช้ได้กับ YAML pipeline'},
+ {q:'Feature flag ช่วยเรื่อง deploy อย่างไร',o:['ทำให้ build เร็วขึ้นเพราะ compile น้อยลง','แยก deploy ออกจาก release ฟีเจอร์','ไม่ต้องเขียน test ให้ฟีเจอร์ที่ยังปิดอยู่','ลดขนาด artifact ที่ build'],a:1,e:'deploy โค้ดที่ซ่อนอยู่ แล้วเปิดให้บางกลุ่ม/ปิดทันทีเมื่อมีปัญหา'},
+ {q:'Canary release คืออะไร',o:['deploy ไปทุกเครื่องพร้อมกัน','ส่ง traffic ส่วนน้อยไปเวอร์ชันใหม่ก่อน','ทดสอบบนเครื่อง dev ก่อน deploy','deploy เฉพาะช่วงกลางคืน'],a:1,e:'ดู metric ของกลุ่มเล็ก แล้วค่อยขยาย ถ้าแย่ก็ถอยกลับ'},
+ {q:'Infrastructure as Code (เช่น Terraform, Bicep) มีประโยชน์หลักอะไร',o:['ทำให้ไม่ต้องจ่ายค่า cloud ในช่วงทดสอบ','สร้าง infra ซ้ำได้เหมือนเดิม มี review','แอปเร็วขึ้นเพราะ infra ถูก optimize อัตโนมัติ','แทนที่การเขียน unit test'],a:1,e:'infra อยู่ใน Git ผ่าน PR/review และสร้างซ้ำได้ทุก environment'},
+ {q:'DORA metrics ข้อใดวัด "ความเร็วในการกู้คืน"',o:['Deployment frequency','Mean time to restore (MTTR)','Lead time for changes','Change failure rate'],a:1,e:'DORA 4 ตัว: deployment frequency, lead time, change failure rate, time to restore'}
+],
+cloud:[
+ {q:'ทีมต้องการลดค่าใช้จ่ายของ VM ที่รันงานต่อเนื่องคงที่ทั้งปี ตัวเลือกใดเหมาะ',o:['spot instance ทั้งหมด','reserved instance / savings plan','เปิดปิด VM ทุกชั่วโมง','ย้ายไป region ที่ไกลที่สุด'],a:1,e:'งานคงที่ทั้งปีได้ส่วนลดจากการผูกสัญญา spot เหมาะกับงานที่ถูกหยุดได้'},
+ {q:'Spot/preemptible instance เหมาะกับงานแบบใด',o:['ฐานข้อมูลหลักของระบบ','batch ที่หยุดกลางคันแล้วทำต่อได้','API ที่ต้องตอบตลอด 24 ชั่วโมง','ระบบชำระเงินที่ต้องเสถียร'],a:1,e:'ถูกมากแต่ถูกเรียกคืนได้ทุกเมื่อ'},
+ {q:'ต้องการให้ API บน cloud เข้าถึงฐานข้อมูลโดยไม่ผ่าน internet สาธารณะ ใช้อะไร',o:['เปิด public endpoint แล้วตั้ง password ยาว','private endpoint ใน VNet','VPN ของพนักงานแต่ละคน','ย้ายฐานข้อมูลไปไว้ในเครื่อง dev'],a:1,e:'private endpoint/private link ให้ traffic อยู่ใน network ของเรา'},
+ {q:'RPO และ RTO ต่างกันอย่างไร',o:['RPO = ข้อมูลที่ยอมเสีย, RTO = เวลากู้ระบบ','RPO = เวลากู้ระบบ, RTO = ข้อมูลที่ยอมเสีย','เหมือนกัน ใช้แทนกันได้','RPO ใช้กับ cloud, RTO ใช้กับ on-prem'],a:0,e:'RPO กำหนดความถี่ backup/replication ส่วน RTO กำหนดวิธี failover'},
+ {q:'CDN ช่วยอะไรเว็บที่มีผู้ใช้หลายประเทศ',o:['เพิ่มความเร็ว CPU ของ server','cache static ที่ edge ใกล้ผู้ใช้','ทำให้ฐานข้อมูลอ่านเร็วขึ้นโดยตรง','แทนที่ load balancer ภายใน'],a:1,e:'ลด latency และโหลดของ origin'},
+ {q:'Multi-region active-active มีความท้าทายหลักคืออะไร',o:['ใช้งานง่ายกว่า single region','ความสอดคล้องของข้อมูลข้าม region','ค่าใช้จ่ายถูกลงครึ่งหนึ่งเสมอ','ไม่ต้องทำ monitoring แยก'],a:1,e:'การเขียนพร้อมกันหลาย region ต้องจัดการ conflict/latency และต้นทุนสูงขึ้น'}
+],
+ai:[
+ {q:'ทำ RAG แล้วคำตอบยังผิด เพราะค้นได้ chunk ที่ไม่เกี่ยวข้อง ควรปรับอะไรก่อน',o:['เพิ่ม temperature ของโมเดล','ปรับ chunking และ retrieval','เปลี่ยนเป็นโมเดลที่ใหญ่ที่สุด','ตัด system prompt ออกทั้งหมด'],a:1,e:'คุณภาพ RAG ขึ้นกับ retrieval: ขนาด/การแบ่ง chunk, hybrid search, re-ranking'},
+ {q:'ต้องการวัดว่าแชตบอตตอบถูกขึ้นหรือแย่ลงหลังแก้ prompt ควรทำอย่างไร',o:['ลองถามเองสองสามคำถามที่ผู้ใช้ถามบ่อย','ชุดทดสอบ (eval set) + เกณฑ์ให้คะแนน','ดูจำนวน token ที่ใช้ต่อคำตอบ','ถามโมเดลว่าตอบดีขึ้นไหม'],a:1,e:'eval set คงที่เทียบก่อน/หลังได้ อาจใช้ LLM-as-judge ร่วมกับการตรวจโดยคน'},
+ {q:'Overfitting ใน machine learning คืออะไร',o:['โมเดลเรียนรู้ช้าเกินไป','จำข้อมูล train แต่ทำนายข้อมูลใหม่แย่','ข้อมูลมีมากเกินกว่าที่โมเดลรับได้','โมเดลมีพารามิเตอร์น้อยเกินไป'],a:1,e:'แก้ด้วยข้อมูลเพิ่ม regularization หรือ validation/early stopping'},
+ {q:'ทำไมต้องแบ่งข้อมูลเป็น train / validation / test',o:['เพื่อให้ train เร็วขึ้นสามเท่า','วัดผลกับข้อมูลที่โมเดลไม่เคยเห็น','เพราะ GPU รับข้อมูลได้จำกัด','เพื่อแยกข้อมูลตามวันที่สร้าง'],a:1,e:'test set ต้องไม่ใช้ระหว่างพัฒนา จึงสะท้อนผลจริง'},
+ {q:'ใช้ LLM ทำงานที่ต้องเรียก API ภายในองค์กร (เช่น ดูสถานะคำสั่งซื้อ) ควรใช้กลไกใด',o:['ให้โมเดลเดา URL แล้วเรียกเอง','tool/function calling ที่โค้ดเราควบคุม','ใส่ API key ใน prompt ให้โมเดล','ให้โมเดลเขียน SQL รันตรงบน production'],a:1,e:'โมเดลเสนอการเรียก tool โค้ดเราตรวจสิทธิ์และเป็นคนเรียกจริง'},
+ {q:'ข้อใดคือความเสี่ยงของการใช้โค้ดที่ AI สร้างโดยไม่ตรวจ',o:['โค้ดจะคอมไพล์ไม่ผ่านทุกครั้ง','ช่องโหว่ บั๊กแฝง และปัญหา license','ทำให้ repository ใหญ่ขึ้นมาก','AI จะเก็บโค้ดของเราไว้ใช้เอง'],a:1,e:'ต้อง review, test และตรวจ security/license เหมือนโค้ดจากคน'}
+],
+sqlt:[
+ {q:"SELECT COUNT(*) FROM orders o LEFT JOIN payments p ON p.order_id = o.id ได้จำนวนมากกว่าจำนวน order สาเหตุคือ",o:['LEFT JOIN ตัดแถวที่ไม่มี payment','order หนึ่งมีหลาย payment ทำให้แถวซ้ำ','COUNT(*) นับค่า NULL เป็นสองเท่า','ต้องใส่ ORDER BY ก่อน COUNT'],a:1,e:'one-to-many ทำให้แถวคูณ ใช้ COUNT(DISTINCT o.id) หรือ aggregate ก่อน join'},
+ {q:'ต้องการ 3 สินค้าขายดีที่สุดของแต่ละหมวด ควรใช้',o:['GROUP BY category ORDER BY SUM(qty) DESC LIMIT 3','ROW_NUMBER() OVER (PARTITION BY category ORDER BY qty DESC) <= 3','RANK() OVER (ORDER BY qty DESC) <= 3 แล้ว GROUP BY category','MAX(qty) GROUP BY category'],a:1,e:'top-N ต่อกลุ่มใช้ window function แล้วกรองใน CTE/subquery'},
+ {q:'LAG(amount) OVER (ORDER BY month) ให้ค่าอะไร',o:['ผลรวมของทุกเดือนก่อนหน้า','ค่า amount ของเดือนก่อนหน้า','ค่า amount ของเดือนถัดไป','ค่าเฉลี่ยเคลื่อนที่ 3 เดือน'],a:1,e:'ใช้คำนวณการเปลี่ยนแปลงเทียบช่วงก่อน (month-over-month)'},
+ {q:'UNION กับ UNION ALL ต่างกันอย่างไร',o:['UNION ALL ตัดแถวซ้ำ, UNION เก็บทั้งหมด','UNION ตัดแถวซ้ำ, UNION ALL เก็บทั้งหมด','UNION ใช้ได้กับตารางเดียวเท่านั้น','เหมือนกัน แต่ UNION ALL ช้ากว่า'],a:1,e:'UNION ต้องเรียง/ตัดซ้ำจึงช้ากว่า ใช้ UNION ALL ถ้ารู้ว่าไม่ซ้ำ'},
+ {q:'WHERE amount > NULL ให้ผลอย่างไร',o:['คืนทุกแถวที่ amount ไม่เป็น NULL เพราะ NULL ถือเป็นค่าน้อยสุด','ไม่คืนแถวใดเลย เพราะเทียบ NULL ได้ UNKNOWN','คืนเฉพาะแถวที่ amount เป็น NULL','เกิด syntax error ทันที'],a:1,e:'การเทียบกับ NULL ให้ UNKNOWN ต้องใช้ IS NULL / IS NOT NULL'},
+ {q:'EXISTS กับ IN (subquery) ข้อใดถูกต้อง',o:['EXISTS ใช้ไม่ได้กับ subquery ที่ correlate','NOT EXISTS ปลอดภัยกว่า NOT IN เมื่อมี NULL','IN เร็วกว่า EXISTS ในทุกฐานข้อมูล','EXISTS คืนค่าคอลัมน์จาก subquery'],a:1,e:'NOT IN กับ subquery ที่มี NULL ให้ผลว่างทั้งหมด NOT EXISTS ไม่มีปัญหานี้'}
+],
+pc:[
+ {q:'prompt ให้ AI เขียนฟังก์ชันแปลงวันที่ ควรระบุ timezone หรือไม่',o:['ไม่ต้อง AI จะใช้ timezone ของเครื่องเสมอ','ต้องระบุ เพราะผลต่างกันได้ทั้งวัน','ระบุเฉพาะเมื่อผลลัพธ์เป็น string','ระบุเฉพาะเมื่อใช้ภาษา C#'],a:1,e:'วันที่ขึ้นกับ timezone/DST ต้องกำหนดชัดใน spec และตัวอย่าง'},
+ {q:'ทำไมควรให้ AI "คืนค่าแทนการ throw" หรือระบุพฤติกรรม error ชัดเจน',o:['ทำให้โค้ดสั้นลงเสมอ','test ตรวจผลได้แน่นอน ไม่ขึ้นกับการตีความ','AI ส่วนใหญ่เขียน exception ใน JavaScript ไม่ได้','exception ทำให้ JavaScript ช้า'],a:1,e:'spec ที่ไม่ระบุ error behavior ทำให้ AI เลือกเองและตก hidden test'},
+ {q:'ตัวอย่างใน prompt ควรครอบคลุมอะไรบ้าง',o:['เฉพาะกรณีปกติที่พบบ่อย','ปกติ, ขอบ, และกรณีที่ต้องปฏิเสธ','เฉพาะกรณี error','ตัวอย่างเดียวที่ยาวที่สุด'],a:1,e:'ตัวอย่างขอบ (ค่าว่าง, ช่องว่าง, ตัวพิมพ์) และตัวอย่างลบช่วยกำหนดขอบเขต'},
+ {q:'ข้อใด "ไม่ควร" ใส่ในข้อสอบ Prompt Coding ที่ห้ามเขียนโค้ด',o:['กฎการตัดช่องว่างหน้า-หลังข้อความ','regex สำเร็จรูปที่ AI ต้องใช้','ตัวอย่าง input → output','รูปแบบ output ที่แน่นอน'],a:1,e:'regex/โค้ดใน prompt ผิดเงื่อนไขข้อสอบ ต้องอธิบายเป็นภาษาคน'},
+ {q:'หลังส่ง prompt แล้ว 2 จาก 15 test ไม่ผ่าน ควรทำอย่างไรในรอบถัดไป',o:['เพิ่มคำว่า "ให้ถูกทุกกรณี"','ดู test ที่ตก แล้วเพิ่มกฎที่ขาดลงใน spec','ส่ง prompt เดิมซ้ำโดยไม่แก้','ตัดเงื่อนไขอื่นออกให้ prompt สั้นลง'],a:1,e:'แต่ละรอบต้องปิดช่องว่างที่ test เปิดเผย ไม่ใช่สุ่มใหม่'},
+ {q:'การกำหนด "สิ่งที่ต้องคงเดิม" (เช่น ข้อความที่ไม่ตรงกฎต้องไม่ถูกแก้) สำคัญอย่างไร',o:['ไม่สำคัญ AI จะไม่แตะส่วนอื่นอยู่แล้ว','กันไม่ให้ AI แก้เกินกว่าที่ต้องการ','ทำให้ prompt ผ่านการตรวจความยาว','ทำให้ AI ตอบเร็วขึ้นสองเท่า'],a:1,e:'AI มักแก้เกิน (normalize ช่องว่าง, ตัวพิมพ์) ถ้าไม่บอกว่าต้องคงไว้'}
+],
+algo:[
+ {q:'หา subarray ที่ผลรวมเท่ากับ k (มีเลขติดลบได้) ใน O(n) ใช้เทคนิคใด',o:['sliding window สองตัวชี้','prefix sum + hash map นับจำนวน','sort แล้ว two pointers','binary search บน prefix sum'],a:1,e:'มีเลขลบทำให้ sliding window ใช้ไม่ได้ prefix sum + map เก็บความถี่ของ prefix'},
+ {q:'หา k ค่าที่มากที่สุดจาก stream ข้อมูลขนาดใหญ่มาก ใช้โครงสร้างใดประหยัดที่สุด',o:['sort ทั้งหมดทุกครั้งที่มีข้อมูลใหม่','min-heap ขนาด k','hash set ของทุกค่าที่เคยเห็น','stack ขนาด k'],a:1,e:'O(n log k) และใช้หน่วยความจำ O(k)'},
+ {q:'ปัญหาใดเหมาะกับ dynamic programming',o:['subproblem ซ้ำกันและมี optimal substructure','ต้องหาค่าในข้อมูลที่เรียงแล้ว','ต้องจับคู่วงเล็บให้ถูกต้อง','ต้องหาเส้นทางสั้นสุดน้ำหนักเท่ากัน'],a:0,e:'เช่น coin change, LCS, knapsack เก็บผลย่อยไว้ไม่ต้องคำนวณซ้ำ'},
+ {q:'ตรวจว่ากราฟไม่มีทิศทางมีวงจรหรือไม่ ขณะเพิ่มเส้นทีละเส้น',o:['BFS ใหม่ทุกครั้งที่เพิ่มเส้นเพื่อหาทางย้อนกลับ','Union-Find: สองปลายอยู่กลุ่มเดียวกันแล้ว','Topological sort แบบ Kahn','Dijkstra จากทุกโหนด'],a:1,e:'ถ้า find(u) == find(v) ก่อน union แปลว่าเกิดวงจร (ใช้ใน Kruskal)'},
+ {q:'Memory O(1) กับข้อมูลขนาด n หมายความว่า',o:['ใช้หน่วยความจำคงที่ไม่ขึ้นกับ n','ใช้หน่วยความจำ 1 byte เท่านั้น','ใช้หน่วยความจำเท่ากับ n','ห้ามใช้ตัวแปรใด ๆ เลย'],a:0,e:'ไม่รวม input เอง เช่นใช้ตัวแปรนับไม่กี่ตัว'},
+ {q:'C# Dictionary<TKey,TValue> ค้นหาด้วย key มี complexity เฉลี่ยเท่าไร',o:['O(n)','O(1)','O(log n)','O(n log n)'],a:1,e:'hash table — กรณีแย่สุด O(n) เมื่อ hash ชนมาก แต่เฉลี่ย O(1)'}
+]
+};
+
 /* ================= CORE: state, schedule, helpers ================= */
 const COMPS = [
   ['Program Coding',13.55,'code'],['System Design',7.05,'sysd'],['Database Design',7.05,'db'],['GIT',7.05,'git'],
@@ -1045,7 +1622,7 @@ const LV = {B:'Beginner',I:'Intermediate',A:'Advance'};
 const KEY = 'comp2026-lead-training-v1', HIST_KEY = 'comp2026-exam-history';
 function ymd(d){ return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function parseYmd(s){ const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
-const freshState = () => ({lessons:{}, quiz:{}, pre:{}, post:{}, units:{}, prob:{}, sql:{}, prompt:{}, code:{}, practice:'code', target:{role:'Lead', pass:80},
+const freshState = () => ({lessons:{}, quiz:{}, pre:{}, post:{}, units:{}, prob:{}, sql:{}, prompt:{}, code:{}, practice:'mcq', target:{role:'Lead', pass:80},
   sched:{examDate:'2026-11-23', time:'20:00', days:[0,1,2,3,4,5,6], start:ymd(new Date()), units:null}});
 let ST = freshState();
 try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) { ST = Object.assign(ST, s); ST.sched = Object.assign(freshState().sched, s.sched || {}); ST.target = Object.assign({role:'Lead', pass:80}, s.target || {}); ['pre','post','units'].forEach(k => ST[k] = ST[k] || {}); } } catch (e) {}
@@ -1095,8 +1672,10 @@ const UNITS = [
   {id:'u1', t:'วัดระดับก่อนเรียน — สอบ V2 แบบ Final', h:2, manual:true, exam:true},
   {id:'u2', t:'Program Coding I — วิธีคิด + โจทย์ 1–6', h:3, lessons:['algo'], probs:rng(0, 5)},
   {id:'u3', t:'Program Coding II — โจทย์ 7–12 (Advance)', h:3, probs:rng(6, 11)},
+  {id:'u3b', t:'Program Coding III — โจทย์ 13–21 (heap, LIS, deque)', h:3, probs:rng(12, 20)},
   {id:'u4', t:'SQL — บทเรียน + SQL Lab 1–5', h:2.5, lessons:['sqlt'], sql:rng(0, 4)},
   {id:'u5', t:'SQL Lab 6–10 (window, CTE, recursive)', h:2, sql:rng(5, 9)},
+  {id:'u5b', t:'SQL Lab 11–20 (pivot, LAG, RANK, self join)', h:2, sql:rng(10, 19)},
   {id:'u6', t:'System Design', h:1.5, lessons:['sysd']},
   {id:'u7', t:'Database Design', h:1.5, lessons:['db']},
   {id:'u8', t:'Frontend', h:1.5, lessons:['fe']},
@@ -1417,13 +1996,13 @@ function render(){
   const active = view === 'lesson' ? 'learn' : view;
   NAV.forEach(([id, label]) => {
     const b = el('button', id === active ? 'on' : ''); b.innerHTML = ICON[id]; b.appendChild(el('span', null, label));
-    b.onclick = () => nav('/' + (id === 'practice' ? 'practice/' + (ST.practice || 'code') : id)); n.appendChild(b);
+    b.onclick = () => nav('/' + (id === 'practice' ? 'practice/' + (ST.practice || 'mcq') : id)); n.appendChild(b);
   });
   const left = daysLeft();
   document.getElementById('countChip').textContent = left > 0 ? `อีก ${left} วันสอบ` : left === 0 ? 'วันนี้สอบ' : 'สอบแล้ว';
   if (view === 'learn') viewLearn(m);
   else if (view === 'lesson' && lessonById(arg)) viewLesson(m, lessonById(arg));
-  else if (view === 'practice') viewPractice(m, arg || ST.practice || 'code');
+  else if (view === 'practice') viewPractice(m, arg || ST.practice || 'mcq');
   else if (view === 'exam') viewExam(m);
   else viewToday(m);
 }
@@ -1586,7 +2165,7 @@ function renderBlocks(box, blocks){
 }
 function shuffle(a){ a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 // สลับลำดับข้อและตัวเลือก (คืนสำเนา ไม่แก้ข้อมูลต้นฉบับ)
-function shuffledQs(qs){ return shuffle(qs).map(q => { const idx = shuffle(q.o.map((_, i) => i)); return {q: q.q, o: idx.map(i => q.o[i]), a: idx.indexOf(q.a), e: q.e}; }); }
+function shuffledQs(qs){ return shuffle(qs).map(q => { const idx = shuffle(q.o.map((_, i) => i)); return Object.assign({}, q, {o: idx.map(i => q.o[i]), a: idx.indexOf(q.a)}); }); }
 const postQs = l => (POST[l.id] || []).concat(l.quiz);
 function lessonTags(l, meta){
   meta.querySelectorAll('.tag.st').forEach(t => t.remove());
@@ -1679,7 +2258,7 @@ function renderTest(qs, opts){
       ui[i].ex.classList.remove('hidden');
     });
     res.className = 'muted'; res.textContent = `ได้ ${ok}/${qs.length}`;
-    opts.onDone && opts.onDone(ok, qs.length, res);
+    opts.onDone && opts.onDone(ok, qs.length, res, qs.map((q, i) => picks[i] === q.a));
   };
   row.appendChild(chk); row.appendChild(res); box.appendChild(row);
   return box;
@@ -1687,13 +2266,14 @@ function renderTest(qs, opts){
 
 /* ---------- ฝึกโจทย์ ---------- */
 function viewPractice(m, kind){
-  if (!['code', 'sql', 'prompt'].includes(kind)) kind = 'code';
+  if (!['mcq', 'code', 'sql', 'prompt'].includes(kind)) kind = 'mcq';
   ST.practice = kind; save();
   m.appendChild(el('h1', null, 'ฝึกโจทย์'));
   const seg = el('div', 'seg');
-  [['code', `Coding · ${PROBLEMS.filter(p => ST.prob[p.id]).length}/${PROBLEMS.length}`], ['sql', `SQL · ${SQL_EX.filter((_, i) => ST.sql[i]).length}/${SQL_EX.length}`], ['prompt', `Prompt · ${PROMPT_TASKS.filter(t => ST.prompt[t.id]).length}/${PROMPT_TASKS.length}`]]
+  [['mcq', `ปรนัย · ${allDrillQs(LESSONS.map(l => l.id)).length}`], ['code', `Coding · ${PROBLEMS.filter(p => ST.prob[p.id]).length}/${PROBLEMS.length}`], ['sql', `SQL · ${SQL_EX.filter((_, i) => ST.sql[i]).length}/${SQL_EX.length}`], ['prompt', `Prompt · ${PROMPT_TASKS.filter(t => ST.prompt[t.id]).length}/${PROMPT_TASKS.length}`]]
     .forEach(([k, label]) => { const b = el('button', k === kind ? 'on' : '', label); b.onclick = () => nav('/practice/' + k); seg.appendChild(b); });
   m.appendChild(seg);
+  if (kind === 'mcq') return viewDrill(m);
   const lesson = {code: 'algo', sql: 'sqlt', prompt: 'pc'}[kind], l = lessonById(lesson);
   if (l && !lessonPassed(lesson)) {
     const a = el('a', 'item card'); a.href = '#/lesson/' + lesson; a.style.padding = '12px 16px';
@@ -1704,6 +2284,80 @@ function viewPractice(m, kind){
   if (kind === 'code') renderProblems(m);
   else if (kind === 'sql') renderSqlLab(m);
   else renderPromptLab(m);
+}
+
+/* ---------- ฝึกปรนัย: สุ่มจากคลังทั้งหมด (pre-test + post-test + BANK) ตามบทที่เลือก ---------- */
+let drillRun = null;  // ชุดที่กำลังทำ (ไม่บันทึก — รีเฟรชแล้วเริ่มใหม่)
+const qKey = q => q.lid + '|' + q.q.slice(0, 48);
+function allDrillQs(ids){
+  return ids.flatMap(id => { const l = lessonById(id); return [].concat(l ? l.quiz : [], POST[id] || [], BANK[id] || []).map(q => Object.assign({lid: id}, q)); });
+}
+function drillStats(id){ const d = (ST.drill || {})[id]; return d && d.n ? {n: d.n, pct: Math.round(d.ok / d.n * 100)} : null; }
+function viewDrill(m){
+  ST.drill = ST.drill || {}; ST.wrongQs = ST.wrongQs || {}; ST.drillCfg = ST.drillCfg || {ids: LESSONS.map(l => l.id), n: 20, mode: 'all'};
+  const cfg = ST.drillCfg;
+  if (drillRun) {
+    const c = el('div', 'card');
+    c.appendChild(el('h2', null, `ชุดฝึก ${drillRun.length} ข้อ`));
+    c.appendChild(el('p', 'muted', 'ตอบครบแล้วกดส่ง จะเห็นเฉลยพร้อมคำอธิบายทุกข้อ'));
+    c.appendChild(renderTest(drillRun, {label: 'ส่งคำตอบ', onDone: (ok, n, res, results) => {
+      drillRun.forEach((q, i) => {
+        const d = ST.drill[q.lid] = ST.drill[q.lid] || {n: 0, ok: 0}; d.n++; if (results[i]) d.ok++;
+        const k = qKey(q); if (results[i]) delete ST.wrongQs[k]; else ST.wrongQs[k] = 1;
+      });
+      save();
+      const pct = Math.round(ok / n * 100);
+      res.className = pct >= 80 ? 'pass' : pct >= 50 ? 'warn' : 'fail';
+      res.textContent = `ได้ ${ok}/${n} (${pct}%)`;
+      const again = el('button', 'btn primary', 'ทำชุดใหม่'); again.onclick = () => { drillRun = null; render(); window.scrollTo(0, 0); };
+      res.parentNode.appendChild(again);
+    }}));
+    const quit = el('button', 'btn small', 'เลิกทำชุดนี้'); quit.onclick = () => { drillRun = null; render(); };
+    m.appendChild(c); m.appendChild(quit);
+    return;
+  }
+  const c = el('div', 'card');
+  c.appendChild(el('h2', null, 'ตั้งค่าชุดฝึก'));
+  c.appendChild(el('div', 'muted', 'บทที่ต้องการ'));
+  const chips = el('div', 'row'), picked = new Set(cfg.ids);
+  const allBtn = el('button', 'day wide' + (picked.size === LESSONS.length ? ' on' : ''), 'ทุกบท');
+  allBtn.onclick = () => { if (picked.size === LESSONS.length) picked.clear(); else LESSONS.forEach(l => picked.add(l.id)); cfg.ids = [...picked]; save(); render(); };
+  chips.appendChild(allBtn);
+  GROUPS.forEach(([, ids]) => ids.forEach(id => {
+    const l = lessonById(id); if (!l) return;
+    const b = el('button', 'day wide' + (picked.has(id) ? ' on' : ''), shortTitle(l).slice(0, 24));
+    b.onclick = () => { picked.has(id) ? picked.delete(id) : picked.add(id); cfg.ids = [...picked]; save(); render(); };
+    chips.appendChild(b);
+  }));
+  c.appendChild(chips);
+  const segOf = (label, opts, cur, fn) => {
+    c.appendChild(el('div', 'muted', label));
+    const sg = el('div', 'seg');
+    opts.forEach(([v, t]) => { const b = el('button', v === cur ? 'on' : '', t); b.onclick = () => { fn(v); save(); render(); }; sg.appendChild(b); });
+    c.appendChild(sg);
+  };
+  const pool = allDrillQs(cfg.ids), wrongPool = pool.filter(q => ST.wrongQs[qKey(q)]);
+  segOf('จำนวนข้อ', [[10, '10 ข้อ'], [20, '20 ข้อ'], [30, '30 ข้อ']], cfg.n, v => cfg.n = v);
+  segOf('เลือกข้อจาก', [['all', `สุ่มทั้งหมด (${pool.length})`], ['wrong', `เคยตอบผิด (${wrongPool.length})`]], cfg.mode, v => cfg.mode = v);
+  const src = cfg.mode === 'wrong' ? wrongPool : pool;
+  const start = el('button', 'btn primary block', src.length ? `เริ่มฝึก ${Math.min(cfg.n, src.length)} ข้อ` : 'ยังไม่มีข้อให้ฝึก');
+  start.disabled = !src.length;
+  start.onclick = () => { drillRun = shuffledQs(shuffle(src).slice(0, cfg.n)); render(); window.scrollTo(0, 0); };
+  c.appendChild(start);
+  m.appendChild(c);
+  // สถิติรายบท — เรียงจากแม่นน้อยสุด เพื่อชี้จุดอ่อน
+  const rows = LESSONS.map(l => ({l, s: drillStats(l.id)})).filter(x => x.s).sort((a, b) => a.s.pct - b.s.pct);
+  m.appendChild(el('div', 'section-label', 'ความแม่นรายบท (จากการฝึก)'));
+  const st = el('div', 'card');
+  if (!rows.length) st.appendChild(el('div', 'empty', 'ยังไม่มีสถิติ — ลองฝึกสักชุด'));
+  rows.forEach(({l, s}) => {
+    const r = el('a', 'item'); r.href = '#/lesson/' + l.id;
+    const mm = el('div', 'main'); mm.appendChild(el('div', 'ttl', shortTitle(l)));
+    mm.appendChild(el('div', 'sub', `ตอบไป ${s.n} ข้อ · ถูก ${s.pct}%` + (s.pct < 70 ? ' · ควรทบทวน' : '')));
+    const bar = el('div', 'progress'), f = el('div'); f.style.width = s.pct + '%'; if (s.pct < 70) f.style.background = 'var(--yellow)'; bar.appendChild(f); mm.appendChild(bar);
+    r.appendChild(mm); r.appendChild(el('span', 'chev', '›')); st.appendChild(r);
+  });
+  m.appendChild(st);
 }
 
 /* ---------- สอบ ---------- */

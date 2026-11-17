@@ -21,13 +21,13 @@ function render(){
   const active = view === 'lesson' ? 'learn' : view;
   NAV.forEach(([id, label]) => {
     const b = el('button', id === active ? 'on' : ''); b.innerHTML = ICON[id]; b.appendChild(el('span', null, label));
-    b.onclick = () => nav('/' + (id === 'practice' ? 'practice/' + (ST.practice || 'code') : id)); n.appendChild(b);
+    b.onclick = () => nav('/' + (id === 'practice' ? 'practice/' + (ST.practice || 'mcq') : id)); n.appendChild(b);
   });
   const left = daysLeft();
   document.getElementById('countChip').textContent = left > 0 ? `อีก ${left} วันสอบ` : left === 0 ? 'วันนี้สอบ' : 'สอบแล้ว';
   if (view === 'learn') viewLearn(m);
   else if (view === 'lesson' && lessonById(arg)) viewLesson(m, lessonById(arg));
-  else if (view === 'practice') viewPractice(m, arg || ST.practice || 'code');
+  else if (view === 'practice') viewPractice(m, arg || ST.practice || 'mcq');
   else if (view === 'exam') viewExam(m);
   else viewToday(m);
 }
@@ -190,7 +190,7 @@ function renderBlocks(box, blocks){
 }
 function shuffle(a){ a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 // สลับลำดับข้อและตัวเลือก (คืนสำเนา ไม่แก้ข้อมูลต้นฉบับ)
-function shuffledQs(qs){ return shuffle(qs).map(q => { const idx = shuffle(q.o.map((_, i) => i)); return {q: q.q, o: idx.map(i => q.o[i]), a: idx.indexOf(q.a), e: q.e}; }); }
+function shuffledQs(qs){ return shuffle(qs).map(q => { const idx = shuffle(q.o.map((_, i) => i)); return Object.assign({}, q, {o: idx.map(i => q.o[i]), a: idx.indexOf(q.a)}); }); }
 const postQs = l => (POST[l.id] || []).concat(l.quiz);
 function lessonTags(l, meta){
   meta.querySelectorAll('.tag.st').forEach(t => t.remove());
@@ -283,7 +283,7 @@ function renderTest(qs, opts){
       ui[i].ex.classList.remove('hidden');
     });
     res.className = 'muted'; res.textContent = `ได้ ${ok}/${qs.length}`;
-    opts.onDone && opts.onDone(ok, qs.length, res);
+    opts.onDone && opts.onDone(ok, qs.length, res, qs.map((q, i) => picks[i] === q.a));
   };
   row.appendChild(chk); row.appendChild(res); box.appendChild(row);
   return box;
@@ -291,13 +291,14 @@ function renderTest(qs, opts){
 
 /* ---------- ฝึกโจทย์ ---------- */
 function viewPractice(m, kind){
-  if (!['code', 'sql', 'prompt'].includes(kind)) kind = 'code';
+  if (!['mcq', 'code', 'sql', 'prompt'].includes(kind)) kind = 'mcq';
   ST.practice = kind; save();
   m.appendChild(el('h1', null, 'ฝึกโจทย์'));
   const seg = el('div', 'seg');
-  [['code', `Coding · ${PROBLEMS.filter(p => ST.prob[p.id]).length}/${PROBLEMS.length}`], ['sql', `SQL · ${SQL_EX.filter((_, i) => ST.sql[i]).length}/${SQL_EX.length}`], ['prompt', `Prompt · ${PROMPT_TASKS.filter(t => ST.prompt[t.id]).length}/${PROMPT_TASKS.length}`]]
+  [['mcq', `ปรนัย · ${allDrillQs(LESSONS.map(l => l.id)).length}`], ['code', `Coding · ${PROBLEMS.filter(p => ST.prob[p.id]).length}/${PROBLEMS.length}`], ['sql', `SQL · ${SQL_EX.filter((_, i) => ST.sql[i]).length}/${SQL_EX.length}`], ['prompt', `Prompt · ${PROMPT_TASKS.filter(t => ST.prompt[t.id]).length}/${PROMPT_TASKS.length}`]]
     .forEach(([k, label]) => { const b = el('button', k === kind ? 'on' : '', label); b.onclick = () => nav('/practice/' + k); seg.appendChild(b); });
   m.appendChild(seg);
+  if (kind === 'mcq') return viewDrill(m);
   const lesson = {code: 'algo', sql: 'sqlt', prompt: 'pc'}[kind], l = lessonById(lesson);
   if (l && !lessonPassed(lesson)) {
     const a = el('a', 'item card'); a.href = '#/lesson/' + lesson; a.style.padding = '12px 16px';
@@ -308,6 +309,80 @@ function viewPractice(m, kind){
   if (kind === 'code') renderProblems(m);
   else if (kind === 'sql') renderSqlLab(m);
   else renderPromptLab(m);
+}
+
+/* ---------- ฝึกปรนัย: สุ่มจากคลังทั้งหมด (pre-test + post-test + BANK) ตามบทที่เลือก ---------- */
+let drillRun = null;  // ชุดที่กำลังทำ (ไม่บันทึก — รีเฟรชแล้วเริ่มใหม่)
+const qKey = q => q.lid + '|' + q.q.slice(0, 48);
+function allDrillQs(ids){
+  return ids.flatMap(id => { const l = lessonById(id); return [].concat(l ? l.quiz : [], POST[id] || [], BANK[id] || []).map(q => Object.assign({lid: id}, q)); });
+}
+function drillStats(id){ const d = (ST.drill || {})[id]; return d && d.n ? {n: d.n, pct: Math.round(d.ok / d.n * 100)} : null; }
+function viewDrill(m){
+  ST.drill = ST.drill || {}; ST.wrongQs = ST.wrongQs || {}; ST.drillCfg = ST.drillCfg || {ids: LESSONS.map(l => l.id), n: 20, mode: 'all'};
+  const cfg = ST.drillCfg;
+  if (drillRun) {
+    const c = el('div', 'card');
+    c.appendChild(el('h2', null, `ชุดฝึก ${drillRun.length} ข้อ`));
+    c.appendChild(el('p', 'muted', 'ตอบครบแล้วกดส่ง จะเห็นเฉลยพร้อมคำอธิบายทุกข้อ'));
+    c.appendChild(renderTest(drillRun, {label: 'ส่งคำตอบ', onDone: (ok, n, res, results) => {
+      drillRun.forEach((q, i) => {
+        const d = ST.drill[q.lid] = ST.drill[q.lid] || {n: 0, ok: 0}; d.n++; if (results[i]) d.ok++;
+        const k = qKey(q); if (results[i]) delete ST.wrongQs[k]; else ST.wrongQs[k] = 1;
+      });
+      save();
+      const pct = Math.round(ok / n * 100);
+      res.className = pct >= 80 ? 'pass' : pct >= 50 ? 'warn' : 'fail';
+      res.textContent = `ได้ ${ok}/${n} (${pct}%)`;
+      const again = el('button', 'btn primary', 'ทำชุดใหม่'); again.onclick = () => { drillRun = null; render(); window.scrollTo(0, 0); };
+      res.parentNode.appendChild(again);
+    }}));
+    const quit = el('button', 'btn small', 'เลิกทำชุดนี้'); quit.onclick = () => { drillRun = null; render(); };
+    m.appendChild(c); m.appendChild(quit);
+    return;
+  }
+  const c = el('div', 'card');
+  c.appendChild(el('h2', null, 'ตั้งค่าชุดฝึก'));
+  c.appendChild(el('div', 'muted', 'บทที่ต้องการ'));
+  const chips = el('div', 'row'), picked = new Set(cfg.ids);
+  const allBtn = el('button', 'day wide' + (picked.size === LESSONS.length ? ' on' : ''), 'ทุกบท');
+  allBtn.onclick = () => { if (picked.size === LESSONS.length) picked.clear(); else LESSONS.forEach(l => picked.add(l.id)); cfg.ids = [...picked]; save(); render(); };
+  chips.appendChild(allBtn);
+  GROUPS.forEach(([, ids]) => ids.forEach(id => {
+    const l = lessonById(id); if (!l) return;
+    const b = el('button', 'day wide' + (picked.has(id) ? ' on' : ''), shortTitle(l).slice(0, 24));
+    b.onclick = () => { picked.has(id) ? picked.delete(id) : picked.add(id); cfg.ids = [...picked]; save(); render(); };
+    chips.appendChild(b);
+  }));
+  c.appendChild(chips);
+  const segOf = (label, opts, cur, fn) => {
+    c.appendChild(el('div', 'muted', label));
+    const sg = el('div', 'seg');
+    opts.forEach(([v, t]) => { const b = el('button', v === cur ? 'on' : '', t); b.onclick = () => { fn(v); save(); render(); }; sg.appendChild(b); });
+    c.appendChild(sg);
+  };
+  const pool = allDrillQs(cfg.ids), wrongPool = pool.filter(q => ST.wrongQs[qKey(q)]);
+  segOf('จำนวนข้อ', [[10, '10 ข้อ'], [20, '20 ข้อ'], [30, '30 ข้อ']], cfg.n, v => cfg.n = v);
+  segOf('เลือกข้อจาก', [['all', `สุ่มทั้งหมด (${pool.length})`], ['wrong', `เคยตอบผิด (${wrongPool.length})`]], cfg.mode, v => cfg.mode = v);
+  const src = cfg.mode === 'wrong' ? wrongPool : pool;
+  const start = el('button', 'btn primary block', src.length ? `เริ่มฝึก ${Math.min(cfg.n, src.length)} ข้อ` : 'ยังไม่มีข้อให้ฝึก');
+  start.disabled = !src.length;
+  start.onclick = () => { drillRun = shuffledQs(shuffle(src).slice(0, cfg.n)); render(); window.scrollTo(0, 0); };
+  c.appendChild(start);
+  m.appendChild(c);
+  // สถิติรายบท — เรียงจากแม่นน้อยสุด เพื่อชี้จุดอ่อน
+  const rows = LESSONS.map(l => ({l, s: drillStats(l.id)})).filter(x => x.s).sort((a, b) => a.s.pct - b.s.pct);
+  m.appendChild(el('div', 'section-label', 'ความแม่นรายบท (จากการฝึก)'));
+  const st = el('div', 'card');
+  if (!rows.length) st.appendChild(el('div', 'empty', 'ยังไม่มีสถิติ — ลองฝึกสักชุด'));
+  rows.forEach(({l, s}) => {
+    const r = el('a', 'item'); r.href = '#/lesson/' + l.id;
+    const mm = el('div', 'main'); mm.appendChild(el('div', 'ttl', shortTitle(l)));
+    mm.appendChild(el('div', 'sub', `ตอบไป ${s.n} ข้อ · ถูก ${s.pct}%` + (s.pct < 70 ? ' · ควรทบทวน' : '')));
+    const bar = el('div', 'progress'), f = el('div'); f.style.width = s.pct + '%'; if (s.pct < 70) f.style.background = 'var(--yellow)'; bar.appendChild(f); mm.appendChild(bar);
+    r.appendChild(mm); r.appendChild(el('span', 'chev', '›')); st.appendChild(r);
+  });
+  m.appendChild(st);
 }
 
 /* ---------- สอบ ---------- */
