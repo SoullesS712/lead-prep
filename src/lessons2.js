@@ -20,10 +20,10 @@ LESSONS.push(
  {traps:['CSR ล้วนสำหรับหน้า SEO = คำตอบผิด','รูป 4 MB โหลดพร้อมกันทั้งหน้า → แก้ด้วย resize + lazy + modern format','เก็บ token ใน localStorage = เสี่ยง XSS']}
  ],
  quiz:[
- {q:'หน้าแนะนำสินค้าต้องติด SEO และเร็วบนมือถือ ส่วน dashboard หลัง login โต้ตอบมาก ควรเลือก',o:['CSR ทั้งหมด','SSR/SSG/ISR สำหรับหน้าแนะนำสินค้า และ CSR สำหรับ dashboard','SSR ทั้งหมดรวม dashboard','ใช้ iframe'],a:1,e:'เลือก rendering ตามลักษณะหน้า'},
- {q:'CLS สูงเพราะรูปโหลดแล้วดันเนื้อหาลง แก้อย่างไร',o:['ลบรูป','กำหนด width/height หรือ aspect-ratio ให้รูป','เพิ่ม JS','ใช้ CSR'],a:1,e:'จองพื้นที่ไว้ก่อน'},
- {q:'Service worker สำหรับ API ที่ต้องการข้อมูลสดเมื่อออนไลน์แต่เปิดได้เมื่อออฟไลน์ ใช้กลยุทธ์ใด',o:['cache-only','network-first fallback cache','ไม่ cache เลย','cache-first ตลอดไป'],a:1,e:''},
- {q:'ข้อมูลจาก API ที่หลาย component ใช้ร่วมกันและต้อง refetch/cache ควรจัดการด้วย',o:['useState ในทุก component','Server-state library เช่น React Query','localStorage','global variable'],a:1,e:'จัดการ cache, dedupe, refetch, loading/error ให้'}
+ {q:'หน้าแนะนำสินค้าต้องติด SEO และเร็วบนมือถือ ส่วน dashboard หลัง login โต้ตอบมาก ควรเลือก',o:['CSR ทั้งหมด แล้วใช้ prerender service ช่วย SEO','SSR/SSG กับหน้าสินค้า และ CSR กับ dashboard','SSR ทั้งหมดรวม dashboard เพื่อให้เร็วเท่ากันทุกหน้า','SSG ทั้งหมด แล้ว rebuild ทั้งเว็บทุกครั้งที่ข้อมูลเปลี่ยน'],a:1,e:'เลือก rendering ตามลักษณะหน้า'},
+ {q:'CLS สูงเพราะรูปโหลดแล้วดันเนื้อหาลง แก้อย่างไร',o:['lazy-load รูปทุกรูป รวมถึงรูปที่อยู่บนจอแรก','กำหนด width/height หรือ aspect-ratio ให้รูป','ย้ายรูปไปโหลดด้วย JavaScript หลัง onload เพื่อไม่บล็อกหน้า','ลดคุณภาพรูปให้ไฟล์เล็กลงครึ่งหนึ่ง'],a:1,e:'จองพื้นที่ไว้ก่อน'},
+ {q:'Service worker สำหรับ API ที่ต้องการข้อมูลสดเมื่อออนไลน์แต่เปิดได้เมื่อออฟไลน์ ใช้กลยุทธ์ใด',o:['cache-only','network-first, fallback cache','cache-first เช็กของใหม่วันละครั้ง','stale-while-revalidate'],a:1,e:''},
+ {q:'ข้อมูลจาก API ที่หลาย component ใช้ร่วมกันและต้อง refetch/cache ควรจัดการด้วย',o:['useState ในแต่ละ component แล้ว fetch เอง','server-state library เช่น React Query','เก็บใน localStorage แล้วอ่านทุกครั้ง','Context ตัวเดียวเก็บทุกอย่าง แล้ว fetch ใน root'],a:1,e:'จัดการ cache, dedupe, refetch, loading/error ให้'}
  ]},
 
 {id:'api', tab:'web', comp:'Web & Mobile — Backend & API', w:3.52, target:'A', min:120, title:'Backend & API Design ระดับ Advance',
@@ -65,10 +65,10 @@ public class OrdersController(IOrderService svc) : ControllerBase
  {traps:['PUT ไม่ idempotent ❌ (PUT เป็น idempotent, POST ไม่ใช่)','401 กับ 403 สลับกัน','เปลี่ยนชื่อ field ใน v1 ทันที = breaking change','ส่ง stack trace ใน error response']}
  ],
  quiz:[
- {q:'client ส่ง POST ชำระเงินแล้ว timeout จึงส่งซ้ำ จะกันการตัดเงินซ้ำอย่างไร',o:['ห้าม client retry','Idempotency-Key: server จำผลตาม key และตอบผลเดิม','เปลี่ยนเป็น GET','เพิ่ม timeout'],a:1,e:''},
- {q:'ผู้ใช้ login แล้วแต่ไม่มีสิทธิ์เข้าถึง resource ควรตอบ',o:['401','403','404 เสมอ','500'],a:1,e:'401 = ยังไม่ยืนยันตัวตน (บางระบบตอบ 404 เพื่อซ่อนการมีอยู่ของ resource ได้)'},
- {q:'การเปลี่ยนแปลงใด "ไม่" เป็น breaking change',o:['ลบ field','เปลี่ยน type ของ field','เพิ่ม field ใหม่ใน response','เพิ่ม required field ใน request'],a:2,e:''},
- {q:'รายงานที่ใช้เวลาสร้าง 3 นาที API ควรตอบอย่างไร',o:['ให้ client รอ 3 นาที','202 Accepted + URL สำหรับดูสถานะ (หรือ webhook เมื่อเสร็จ)','500','204'],a:1,e:'asynchronous request-reply pattern'}
+ {q:'client ส่ง POST ชำระเงินแล้ว timeout จึงส่งซ้ำ จะกันการตัดเงินซ้ำอย่างไร',o:['ห้าม client retry แล้วให้ผู้ใช้กดใหม่เอง','Idempotency-Key: server จำผลตาม key และตอบผลเดิม','เพิ่ม timeout ฝั่ง client ให้นานพอที่จะไม่ timeout','เปลี่ยนเป็น PUT เพราะ PUT เป็น idempotent อยู่แล้ว'],a:1,e:''},
+ {q:'ผู้ใช้ login แล้วแต่ไม่มีสิทธิ์เข้าถึง resource ควรตอบ',o:['401 Unauthorized','403 Forbidden','404 Not Found เสมอ','400 Bad Request'],a:1,e:'401 = ยังไม่ยืนยันตัวตน (บางระบบตอบ 404 เพื่อซ่อนการมีอยู่ของ resource ได้)'},
+ {q:'การเปลี่ยนแปลงใด "ไม่" เป็น breaking change',o:['ลบ field ที่ไม่มีใครใช้แล้ว','เปลี่ยน type ของ field จาก int เป็น string','เพิ่ม field ใหม่ใน response','เพิ่ม required field ใน request'],a:2,e:''},
+ {q:'รายงานที่ใช้เวลาสร้าง 3 นาที API ควรตอบอย่างไร',o:['200 OK และให้ client รอจนรายงานเสร็จ','202 Accepted + URL สำหรับดูสถานะ','201 Created พร้อมเนื้อรายงานที่ยังไม่ครบ','504 Gateway Timeout แล้วให้ client ลองใหม่'],a:1,e:'asynchronous request-reply pattern'}
  ]},
 
 /* ---------------- SECURITY ---------------- */
@@ -99,9 +99,9 @@ public class OrdersController(IOrderService svc) : ControllerBase
  ],
  quiz:[
  {q:'ผู้ใช้กรอก URL รูปภาพ แล้ว server ไปดาวน์โหลด ผู้โจมตีใส่ http://169.254.169.254/... ช่องโหว่นี้คือ',o:['XSS','SSRF','CSRF','BOLA'],a:1,e:'กันด้วย allowlist โดเมน, บล็อก IP ภายใน/link-local, ไม่ follow redirect โดยไม่ตรวจ'},
- {q:'flow OAuth2 ที่เหมาะกับ SPA ที่มีผู้ใช้ login',o:['Implicit','Authorization Code + PKCE','Password grant','Client Credentials'],a:1,e:''},
- {q:'ผลสแกนพบ library มี CVE critical ควรทำอย่างไรเป็นระบบ',o:['ไม่ต้องทำ','อัปเดต/patch และเพิ่ม SCA ใน pipeline ให้ fail เมื่อพบช่องโหว่ร้ายแรง','ซ่อนผลสแกน','ลบ test'],a:1,e:'A06 Vulnerable and Outdated Components'},
- {q:'CSP (Content-Security-Policy) ช่วยป้องกันอะไรเป็นหลัก',o:['SQL injection','ลด impact ของ XSS โดยจำกัดแหล่ง script ที่รันได้','DDoS','CSRF ทั้งหมด'],a:1,e:''}
+ {q:'flow OAuth2 ที่เหมาะกับ SPA ที่มีผู้ใช้ login',o:['Implicit','Authorization Code + PKCE','Resource Owner Password Credentials','Client Credentials'],a:1,e:''},
+ {q:'ผลสแกนพบ library มี CVE critical ควรทำอย่างไรเป็นระบบ',o:['บันทึกเป็น known issue แล้วรอ vendor ออก patch ให้เอง','อัปเดต/patch และให้ SCA ใน pipeline fail เมื่อเจอช่องโหว่ร้ายแรง','ปิดผลสแกนตัวนั้นใน report เพราะยังไม่มี exploit','ย้าย library ไปไว้หลัง firewall ภายในองค์กร'],a:1,e:'A06 Vulnerable and Outdated Components'},
+ {q:'CSP (Content-Security-Policy) ช่วยป้องกันอะไรเป็นหลัก',o:['SQL injection ทุกรูปแบบ','ลดผลกระทบของ XSS โดยจำกัดแหล่ง script','CSRF จากเว็บอื่นทั้งหมด','การดักฟังข้อมูลระหว่างทาง (MITM) บนเครือข่ายสาธารณะ'],a:1,e:''}
  ]},
 
 /* ---------------- OPS ---------------- */
@@ -129,9 +129,9 @@ ENTRYPOINT ["dotnet", "Shop.Api.dll"]`},
  {traps:['ENV ApiKey=... ใน Dockerfile = secret ฝังใน image ถาวร','build image แยกต่อ environment เพราะ config ต่างกัน = ผิดหลัก']}
  ],
  quiz:[
- {q:'image .NET ขนาด 1.4 GB เพราะใช้ SDK image ตอนรัน แก้อย่างไร',o:['บีบอัด zip','Multi-stage build: build ด้วย sdk แล้ว copy ไป aspnet runtime image','ลบ Dockerfile','เพิ่ม RAM'],a:1,e:''},
- {q:'ทีม build image แยก Dev/UAT/Prod เพราะ connection string ต่างกัน ควรปรับเป็น',o:['ทำต่อไป','image เดียว ส่ง config/secret ตอน runtime ต่อ environment','ใส่ทุก connection string ใน image','ให้ dev แก้ไฟล์ใน container'],a:1,e:'build once, deploy many'},
- {q:'ข้อใดไม่ใช่ best practice',o:['USER app','สแกนด้วย Trivy','ใช้ tag latest ใน production','.dockerignore'],a:2,e:'latest ทำให้ build ไม่ซ้ำเดิม'}
+ {q:'image .NET ขนาด 1.4 GB เพราะใช้ SDK image ตอนรัน แก้อย่างไร',o:['บีบอัด image ด้วย docker save แล้ว gzip','multi-stage: build ด้วย sdk แล้ว copy ไป aspnet runtime','ใช้ sdk image เดิมแต่ลบ obj/ และ bin/ ออกตอนท้าย','เปลี่ยนเป็น Windows base image ที่เล็กกว่า'],a:1,e:''},
+ {q:'ทีม build image แยก Dev/UAT/Prod เพราะ connection string ต่างกัน ควรปรับเป็น',o:['คงไว้แบบเดิม เพราะแยก image ปลอดภัยกว่า','image เดียว ส่ง config/secret ตอน runtime','ใส่ทุก connection string ใน image แล้วเลือกด้วย flag','ให้ทีม ops แก้ไฟล์ใน container หลัง deploy'],a:1,e:'build once, deploy many'},
+ {q:'ข้อใดไม่ใช่ best practice',o:['รันด้วย USER ที่ไม่ใช่ root','สแกน image ด้วย Trivy ใน CI','ใช้ tag latest ใน production','มีไฟล์ .dockerignore ที่ตัด bin/obj ออก'],a:2,e:'latest ทำให้ build ไม่ซ้ำเดิม'}
  ]},
 
 {id:'cicd', tab:'ops', comp:'CI/CD', w:1.63, target:'I', min:45, title:'CI/CD (Azure DevOps pipelines)',
@@ -166,9 +166,9 @@ stages:
  {traps:['build ใหม่ทุก environment = สิ่งที่ทดสอบไม่ใช่สิ่งที่ขึ้น prod','deploy prod ก่อนแล้วค่อยทดสอบ']}
  ],
  quiz:[
- {q:'pipeline พังทั้งที่ไม่ได้แก้โค้ด เพราะ library ออกเวอร์ชันใหม่ (ใช้ version range) แก้อย่างไร',o:['ลบ test','pin เวอร์ชันด้วย lock file และอัปเดตแบบตั้งใจผ่าน PR (Dependabot)','build เฉพาะวันศุกร์','ใช้ latest ทุกอย่าง'],a:1,e:''},
- {q:'กลยุทธ์ deploy ที่ rollback ได้ภายในไม่กี่วินาที',o:['ทับไฟล์บน server','Blue-green / slot swap','ลบเวอร์ชันเก่าก่อน','deploy ตอนตีสอง'],a:1,e:''},
- {q:'ลำดับ pipeline ที่เหมาะสม',o:['Deploy → Build → Test','Build → Test/Scan → Publish artifact → Deploy UAT → Approval → Deploy Prod','Test → Deploy Prod → Build','Scan หลัง deploy prod เท่านั้น'],a:1,e:''}
+ {q:'pipeline พังทั้งที่ไม่ได้แก้โค้ด เพราะ library ออกเวอร์ชันใหม่ (ใช้ version range) แก้อย่างไร',o:['ลด test ที่พังออกชั่วคราวให้ pipeline ผ่าน','pin เวอร์ชันด้วย lock file และอัปเดตผ่าน PR','เปลี่ยนเป็นดึง latest ทุกครั้งให้ทันสมัย','ให้ build เฉพาะเมื่อมีคนแก้โค้ดใน repo'],a:1,e:''},
+ {q:'กลยุทธ์ deploy ที่ rollback ได้ภายในไม่กี่วินาที',o:['ทับไฟล์บน server แล้ว restart service','Blue-green / slot swap','Rolling update ทีละเครื่องโดยลบตัวเก่า','ลบเวอร์ชันเก่าก่อนแล้วค่อยลงใหม่'],a:1,e:''},
+ {q:'ลำดับ pipeline ที่เหมาะสม',o:['Build → Deploy UAT → Test → Scan → Approve → Prod','Build → Test/Scan → Publish → UAT → Approve → Prod','Test → Build → Deploy Prod → Scan → UAT','Build → Publish → Prod → Test → Approve'],a:1,e:''}
  ]},
 
 {id:'cloud', tab:'ops', comp:'Cloud', w:2.98, target:'I', min:45, title:'Cloud — services, pricing, security',
@@ -180,9 +180,9 @@ stages:
  {traps:['ฝัง access key ใน appsettings','เปิด storage เป็น public เพื่อให้ "ใช้ง่าย"','IaaS ไม่ได้แปลว่า provider patch OS ให้']}
  ],
  quiz:[
- {q:'server 20 เครื่องเปิดตลอด แต่ใช้หนักแค่ 8–10 โมง ควรทำอย่างไร',o:['เพิ่มเป็น 40 เครื่อง','Autoscaling ตาม load/schedule','ปิดระบบกลางคืน','ใช้ VM ใหญ่ขึ้น'],a:1,e:''},
- {q:'แอปบน Azure ต้องอ่าน Key Vault/Blob วิธีที่ปลอดภัยที่สุด',o:['ใส่ key ใน appsettings.json','Managed Identity + role แบบ least privilege','ใช้ account owner','เปิด public'],a:1,e:''},
- {q:'Availability Zone ต่างจาก Region อย่างไร',o:['เหมือนกัน','AZ คือ data center แยกกันภายใน region เดียว','Region อยู่ใน AZ','AZ คือประเทศ'],a:1,e:''}
+ {q:'server 20 เครื่องเปิดตลอด แต่ใช้หนักแค่ 8–10 โมง ควรทำอย่างไร',o:['เพิ่มเป็น 40 เครื่องให้รับช่วงพีคสบาย ๆ','Autoscaling ตาม load/schedule','ย้ายไป VM ขนาดใหญ่ขึ้นเครื่องเดียว','ซื้อ reserved instance ครบ 20 เครื่อง 3 ปี'],a:1,e:''},
+ {q:'แอปบน Azure ต้องอ่าน Key Vault/Blob วิธีที่ปลอดภัยที่สุด',o:['เก็บ connection string ใน appsettings.json','Managed Identity + role แบบ least privilege','ใช้ service principal สิทธิ์ Owner ทั้ง subscription','เปิด public access แล้วใช้ SAS token อายุ 10 ปี'],a:1,e:''},
+ {q:'Availability Zone ต่างจาก Region อย่างไร',o:['AZ กับ Region คือสิ่งเดียวกันแค่ชื่อต่าง','AZ คือ data center แยกกันภายใน region เดียว','Region คือ data center หนึ่งแห่งภายใน AZ','AZ คือ region สำรองที่อยู่คนละประเทศ'],a:1,e:''}
  ]},
 
 /* ---------------- AI ---------------- */
@@ -201,9 +201,9 @@ stages:
  {ul:['ผู้ commit รับผิดชอบโค้ด: อ่านเข้าใจทุกบรรทัด, เขียน/รัน test, ตรวจ security และ license','ระวัง package ที่ AI แต่งชื่อขึ้น (slopsquatting) และ API ที่ deprecated','ไม่ส่ง secret/ข้อมูลลูกค้าเข้าเครื่องมือที่องค์กรไม่อนุญาต']}
  ],
  quiz:[
- {q:'ต้องการผลลัพธ์ extraction ที่คงที่ที่สุดเมื่อส่งเอกสารเดิมซ้ำ ควรตั้ง temperature',o:['สูงสุด','ต่ำ (ใกล้ 0) + structured output','สุ่ม','ไม่มีผล'],a:1,e:''},
+ {q:'ต้องการผลลัพธ์ extraction ที่คงที่ที่สุดเมื่อส่งเอกสารเดิมซ้ำ ควรตั้ง temperature',o:['สูง (ใกล้ 1) เพื่อให้ครอบคลุมทุกคำตอบ','ต่ำ (ใกล้ 0) + structured output','ค่ากลาง 0.7 ตามค่าเริ่มต้นของโมเดล','ไม่มีผล เพราะ temperature คุมแค่ความยาว'],a:1,e:''},
  {q:'Demand forecasting เป็นงานประเภทใด',o:['Classification','Regression','Clustering','Reinforcement'],a:1,e:'ทำนายตัวเลขต่อเนื่อง'},
- {q:'chatbot ตอบนโยบายบริษัทแบบแต่งขึ้นเอง แก้ด้วย',o:['เพิ่ม temperature','RAG + ให้ตอบจาก context และบอกว่าไม่ทราบเมื่อไม่พบ','fine-tune ทุกวัน','prompt ยาวขึ้น'],a:1,e:''},
+ {q:'chatbot ตอบนโยบายบริษัทแบบแต่งขึ้นเอง แก้ด้วย',o:['เพิ่ม temperature ให้ตอบหลากหลายขึ้น','RAG: ตอบจาก context และบอกว่าไม่ทราบเมื่อไม่พบ','fine-tune ด้วยเอกสารนโยบายใหม่ทุกสัปดาห์','เขียน system prompt ให้ยาวและสุภาพขึ้น'],a:1,e:''},
  {q:'Metric ใดเหมาะกับงาน Regression',o:['Precision','Recall','MAE','Accuracy'],a:2,e:''}
  ]},
 
@@ -251,9 +251,9 @@ WHERE order_date >= '2026-01-01' AND order_date < '2026-04-01'`},
  {traps:['ใช้ COUNT(*) แทน COUNT(DISTINCT order_id) หลัง JOIN order_items → นับเกิน','BETWEEN \'2026-03-01\' AND \'2026-03-31\' กับคอลัมน์ที่มีเวลา ตกรายการวันสุดท้าย','LIMIT เป็นของ PostgreSQL/MySQL/SQLite — SQL Server ใช้ TOP / OFFSET FETCH']}
  ],
  quiz:[
- {q:'หลัง JOIN orders กับ order_items ต้องการนับจำนวนคำสั่งซื้อ ควรใช้',o:['COUNT(*)','COUNT(DISTINCT o.id)','SUM(o.id)','MAX(o.id)'],a:1,e:'หนึ่ง order มีหลาย item → COUNT(*) นับเกิน'},
+ {q:'หลัง JOIN orders กับ order_items ต้องการนับจำนวนคำสั่งซื้อ ควรใช้',o:['COUNT(*)','COUNT(DISTINCT o.id)','COUNT(oi.order_id)','SUM(1) OVER (PARTITION BY o.id)'],a:1,e:'หนึ่ง order มีหลาย item → COUNT(*) นับเกิน'},
  {q:'คะแนน 100, 90, 90, 80 ใช้ DENSE_RANK ได้ลำดับใด',o:['1,2,3,4','1,2,2,4','1,2,2,3','1,1,2,3'],a:2,e:''},
- {q:'WHERE customer_id NOT IN (SELECT customer_id FROM orders) ได้ผลว่างเปล่า ทั้งที่มีลูกค้าไม่เคยสั่ง สาเหตุที่เป็นไปได้',o:['ไม่มี index','subquery มีค่า NULL','ต้องใช้ HAVING','ต้องใช้ DISTINCT'],a:1,e:'x NOT IN (..., NULL) = UNKNOWN เสมอ ใช้ NOT EXISTS'}
+ {q:'WHERE customer_id NOT IN (SELECT customer_id FROM orders) ได้ผลว่างเปล่า ทั้งที่มีลูกค้าไม่เคยสั่ง สาเหตุที่เป็นไปได้',o:['คอลัมน์ customer_id ไม่มี index','subquery มีค่า NULL','ต้องใช้ HAVING แทน WHERE','ต้องใส่ DISTINCT ใน subquery'],a:1,e:'x NOT IN (..., NULL) = UNKNOWN เสมอ ใช้ NOT EXISTS'}
  ]},
 
 /* ---------------- Prompt coding theory (shown in Prompt lab) ---------------- */
@@ -284,7 +284,7 @@ WHERE order_date >= '2026-01-01' AND order_date < '2026-04-01'`},
  {ul:['ทุกกฎในโจทย์ถูกพูดถึงครบหรือยัง (ไล่ทีละบรรทัดของโจทย์)','ลำดับการทำเมื่อกฎชนกัน','ตัวพิมพ์ใหญ่/เล็ก, ช่องว่าง, เครื่องหมายวรรคตอนที่ติดท้าย','ตัวอย่างที่ "ต้องไม่เปลี่ยน" อย่างน้อย 2 ตัวอย่าง','ไม่มีคำว่า function/return/=>/regex ใน prompt (ระบบตัดสิทธิ์)','ถ้ารอบแรกไม่ผ่านบางเคส ดูว่า test ชื่ออะไรพัง แล้วเพิ่มกฎ/ตัวอย่างเฉพาะจุดนั้น']}
  ],
  quiz:[
- {q:'สิ่งใดสำคัญที่สุดที่คนมักลืมใส่ใน prompt เมื่อให้ AI เขียนฟังก์ชันแปลงข้อความ',o:['ชื่อผู้เขียน','ขอบเขต/edge case และสิ่งที่ต้องคงเดิม พร้อม negative examples','ภาษาโปรแกรมที่ชอบ','ความยาวโค้ด'],a:1,e:''},
- {q:'ทำไมควรระบุ "ลำดับการประมวลผล"',o:['ให้ prompt ยาวขึ้น','เพราะเมื่อกฎทับกัน (เช่น API key อยู่ใน Bearer token) ผลจะต่างกันตามลำดับ','AI ชอบตัวเลข','ไม่จำเป็น'],a:1,e:''}
+ {q:'สิ่งใดสำคัญที่สุดที่คนมักลืมใส่ใน prompt เมื่อให้ AI เขียนฟังก์ชันแปลงข้อความ',o:['ชื่อผู้เขียนและวันที่ของโค้ด','edge case, สิ่งที่ต้องคงเดิม และตัวอย่างที่ต้องปฏิเสธ','ภาษาโปรแกรม framework และ coding style ที่ทีมใช้','จำนวนบรรทัดสูงสุดของโค้ด'],a:1,e:''},
+ {q:'ทำไมควรระบุ "ลำดับการประมวลผล"',o:['ทำให้ AI ใช้ token น้อยลงในการตอบ','เมื่อกฎทับกัน ผลจะต่างกันตามลำดับที่ทำ','AI จะเขียนโค้ดเร็วขึ้นถ้ามีเลขลำดับ','เพื่อให้ prompt ผ่านการตรวจความยาว'],a:1,e:''}
  ]}
 );

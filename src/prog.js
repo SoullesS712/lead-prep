@@ -31,7 +31,7 @@ int[] dr = { 1, -1, 0, 0 }, dc = { 0, 0, 1, -1 };   // 4 ทิศใน grid`},
  {table:[['Operation','Complexity'],['Dictionary/HashSet add/lookup','O(1) เฉลี่ย'],['Sort','O(n log n)'],['PriorityQueue enqueue/dequeue','O(log n)'],['List.Insert(0,…)/RemoveAt(0)','O(n)'],['LINQ Contains บน List','O(n) (ใช้ HashSet แทนถ้าเช็กบ่อย)']]}
  ],
  quiz:[
- {q:'n = 200,000 ควรใช้อัลกอริทึม complexity ประมาณใด',o:['O(n²)','O(n log n) หรือดีกว่า','O(2ⁿ)','O(n³)'],a:1,e:'n² = 4×10¹⁰ ช้าเกินไป'},
+ {q:'n = 200,000 ควรใช้อัลกอริทึม complexity ประมาณใด',o:['O(n²)','O(n log n) หรือดีกว่า','O(n² log n) ก็ยังทันใน 1 วินาที','O(n³)'],a:1,e:'n² = 4×10¹⁰ ช้าเกินไป'},
  {q:'กราฟมีน้ำหนักเป็นบวก ต้องการระยะสั้นสุดจากจุดเดียว ใช้',o:['BFS','Dijkstra','DFS','Union-Find'],a:1,e:'BFS ใช้ได้เมื่อน้ำหนักทุกเส้นเท่ากัน'},
  {q:'[10, 9, 1].sort() ใน JavaScript ได้ผลใด',o:['[1, 9, 10]','[1, 10, 9]','[10, 9, 1]','error'],a:1,e:'default sort เทียบแบบ string'}
  ]});

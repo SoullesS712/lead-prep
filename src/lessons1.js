@@ -25,7 +25,7 @@ const LESSONS = [
  ],
  quiz:[
  {q:'ระบบ 3 service ต่อกันแบบ synchronous แต่ละตัว 99.9% availability รวมประมาณเท่าไร',o:['99.9%','99.7%','99.97%','100%'],a:1,e:'อนุกรม = คูณกัน 0.999³ ≈ 0.997'},
- {q:'ข้อใดเป็นสาเหตุหลักที่ต้องทำให้ app server เป็น stateless',o:['ให้โค้ดสั้นลง','เพื่อให้ scale out หลัง load balancer ได้ และ instance ไหนล่มก็ไม่เสีย session','เพื่อให้ไม่ต้องใช้ database','เพื่อลดขนาด log'],a:1,e:'state ต้องอยู่ภายนอก (Redis/DB/token) request จึงไปเครื่องไหนก็ได้'},
+ {q:'ข้อใดเป็นสาเหตุหลักที่ต้องทำให้ app server เป็น stateless',o:['ให้โค้ดอ่านง่ายขึ้นและ deploy ได้เร็วขึ้นทุกครั้งที่ปล่อยเวอร์ชันใหม่','ให้ scale out หลัง load balancer ได้ เครื่องไหนล่มก็ไม่เสีย session','ให้เก็บ session ไว้ใน memory ของแต่ละเครื่อง จะได้อ่านเร็วที่สุดโดยไม่ผ่าน network','ให้ไม่ต้องใช้ database สำหรับเก็บข้อมูลผู้ใช้อีกต่อไป'],a:1,e:'state ต้องอยู่ภายนอก (Redis/DB/token) request จึงไปเครื่องไหนก็ได้'},
  {q:'ต้องการแสดง "ลำดับการเรียกกันของ service ตามเวลา" ใน use case เดียว ควรใช้ diagram ใด',o:['ER diagram','Deployment diagram','Sequence diagram','Class diagram'],a:2,e:'Sequence diagram = behavioral view ตามเวลา'},
  {q:'Rate limiter ที่ยอมให้ burst สั้น ๆ แต่คุมอัตราเฉลี่ย คือ',o:['Fixed window','Token bucket','Round robin','Consistent hashing'],a:1,e:'ความจุ bucket = burst, อัตราเติม token = อัตราเฉลี่ย'}
  ]},
@@ -55,9 +55,9 @@ catch (DbUpdateConcurrencyException) { return Conflict(); } // HTTP 409`},
  ],
  quiz:[
  {q:'WHERE status = \'PAID\' AND created_at >= @d ORDER BY created_at ควรใช้ index ใด',o:['(created_at, status)','(status, created_at)','(amount)','ไม่ต้องใช้ index'],a:1,e:'equality ก่อน range/sort'},
- {q:'อ่านแถวเดิมสองครั้งใน transaction ได้ค่าต่างกัน คือ anomaly ใด',o:['Dirty read','Non-repeatable read','Phantom read','Deadlock'],a:1,e:'แก้ด้วย REPEATABLE READ ขึ้นไป'},
- {q:'การเปลี่ยนชื่อคอลัมน์โดยไม่ให้ระบบ downtime ควรทำอย่างไร',o:['ALTER rename ทันที','Expand/contract: เพิ่มคอลัมน์ใหม่ ย้ายข้อมูล ให้แอปใช้ใหม่ แล้วค่อยลบของเก่า','ลบตารางแล้วสร้างใหม่','ปิดระบบชั่วคราว'],a:1,e:'ทำให้แอปเวอร์ชันเก่าและใหม่ทำงานร่วมกันได้ระหว่าง deploy'},
- {q:'WHERE LOWER(email) = @e ไม่ใช้ index บน email เพราะ',o:['email ยาวเกิน','non-sargable — ฟังก์ชันครอบคอลัมน์','ต้องใช้ LIKE','index เสีย'],a:1,e:'แก้ด้วย collation ที่ไม่สนตัวพิมพ์ หรือ computed/functional index'}
+ {q:'อ่านแถวเดิมสองครั้งใน transaction ได้ค่าต่างกัน คือ anomaly ใด',o:['Dirty read','Non-repeatable read','Phantom read','Serialization anomaly'],a:1,e:'แก้ด้วย REPEATABLE READ ขึ้นไป'},
+ {q:'การเปลี่ยนชื่อคอลัมน์โดยไม่ให้ระบบ downtime ควรทำอย่างไร',o:['ALTER COLUMN rename ทันทีใน transaction เดียวตอนคนใช้น้อย','เพิ่มคอลัมน์ใหม่ ย้ายข้อมูล ให้แอปใช้ของใหม่ แล้วค่อยลบของเก่า','สร้าง view ชื่อเดิมครอบตารางใหม่ แล้วลบคอลัมน์เก่าทันที','ใช้ trigger ซิงก์สองคอลัมน์ไว้ตลอด ไม่ต้องลบของเก่า'],a:1,e:'ทำให้แอปเวอร์ชันเก่าและใหม่ทำงานร่วมกันได้ระหว่าง deploy'},
+ {q:'WHERE LOWER(email) = @e ไม่ใช้ index บน email เพราะ',o:['email ยาวเกินขนาด key สูงสุดที่ index รองรับ','ฟังก์ชันครอบคอลัมน์ทำให้ใช้ index ไม่ได้ (non-sargable)','collation ของ index เป็น case-insensitive จึงข้าม index','ต้องเปลี่ยนเป็น LIKE จึงจะใช้ index แบบ prefix ได้'],a:1,e:'แก้ด้วย collation ที่ไม่สนตัวพิมพ์ หรือ computed/functional index'}
  ]},
 
 {id:'micro', tab:'arch', comp:'Microservices', w:5.69, target:'I', min:75, title:'Microservices — สื่อสาร, ข้อมูล, ความทนทาน',
@@ -79,10 +79,10 @@ builder.Services.AddHttpClient<PaymentClient>(c => c.BaseAddress = new("https://
  {traps:['2PC ข้าม microservices = ตัวเลือกที่ผิดในข้อสอบส่วนใหญ่','"shared database" ทำให้ service ผูกกัน — ผิดหลัก','retry โดย operation ไม่ idempotent → ตัดเงินซ้ำ']}
  ],
  quiz:[
- {q:'บันทึก DB สำเร็จแต่ publish event ล้มเหลว (dual write) แก้ด้วย pattern ใด',o:['Circuit breaker','Transactional outbox','Bulkhead','Sticky session'],a:1,e:'event อยู่ใน transaction เดียวกับข้อมูล แล้ว relay ส่งต่อพร้อม retry'},
- {q:'Saga ใช้อะไรย้อนกลับเมื่อขั้นตอนหลังล้มเหลว',o:['Rollback ของ DB กลาง','Compensating transaction','Two-phase commit','ลบ log'],a:1,e:'เช่น ยกเลิกออเดอร์/คืนสต็อก'},
- {q:'ปลายทางล่ม ทำให้ผู้เรียกรอจน thread หมด ควรใช้',o:['Retry ไม่จำกัด','Timeout + circuit breaker','เพิ่ม log','Shared DB'],a:1,e:'fail fast ป้องกัน cascading failure'},
- {q:'Zero trust ระหว่าง service ภายในควรทำอย่างไร',o:['เชื่อทุก request ใน VNet','ยืนยันตัวตนทุกครั้งด้วย mTLS/token และ least privilege','ใช้ IP whitelist อย่างเดียว','ใช้ password เดียวกันทุก service'],a:1,e:'never trust, always verify'}
+ {q:'บันทึก DB สำเร็จแต่ publish event ล้มเหลว (dual write) แก้ด้วย pattern ใด',o:['Circuit breaker','Transactional outbox','Bulkhead isolation','Retry publish ซ้ำใน catch block'],a:1,e:'event อยู่ใน transaction เดียวกับข้อมูล แล้ว relay ส่งต่อพร้อม retry'},
+ {q:'Saga ใช้อะไรย้อนกลับเมื่อขั้นตอนหลังล้มเหลว',o:['Rollback ของ DB กลาง','Compensating transaction','Two-phase commit','Distributed lock ทุกขั้นตอน'],a:1,e:'เช่น ยกเลิกออเดอร์/คืนสต็อก'},
+ {q:'ปลายทางล่ม ทำให้ผู้เรียกรอจน thread หมด ควรใช้',o:['Retry ทันทีหลายรอบจนกว่าปลายทางจะกลับมา','Timeout + circuit breaker','เพิ่มขนาด thread pool ให้ใหญ่พอรองรับการรอ','ให้ทุก service ใช้ database เดียวกันแทนการเรียก'],a:1,e:'fail fast ป้องกัน cascading failure'},
+ {q:'Zero trust ระหว่าง service ภายในควรทำอย่างไร',o:['เชื่อทุก request ที่มาจากใน VNet เดียวกัน','ยืนยันตัวตนทุกครั้งด้วย mTLS/token + least privilege','ใช้ IP allowlist ระหว่าง service อย่างเดียวก็พอ','ใช้ shared secret เดียวกันทุก service ให้จัดการง่าย'],a:1,e:'never trust, always verify'}
  ]},
 
 /* ---------------- ENGINEERING ---------------- */
@@ -100,10 +100,10 @@ builder.Services.AddHttpClient<PaymentClient>(c => c.BaseAddress = new("https://
  {traps:['git pull = fetch + merge (ไม่ใช่แค่ดาวน์โหลด)','reset --hard แล้ว force push บน main คือคำตอบผิดเสมอ','ลบไฟล์ secret ใน commit ใหม่ยังไม่พอ — ยังอยู่ใน history']}
  ],
  quiz:[
- {q:'ต้องการนำ commit แก้บั๊กหนึ่งตัวจาก release/2.3 มาใส่ main',o:['git merge release/2.3','git cherry-pick <sha>','git rebase release/2.3','git stash'],a:1,e:'cherry-pick เอาเฉพาะ commit นั้น'},
- {q:'ใน Git Flow hotfix แตกจากไหนและ merge กลับที่ใด',o:['develop → develop','main → main และ develop','feature → main','release → release'],a:1,e:'กันบั๊กกลับมาใน release ถัดไป'},
- {q:'มี 300 commits ระหว่างเวอร์ชันดีกับเวอร์ชันพัง วิธีหาเร็วที่สุด',o:['git log อ่านทีละตัว','git bisect','git blame','git revert ทั้งหมด'],a:1,e:'binary search ≈ 9 รอบ'},
- {q:'เผลอ reset --hard แล้ว commit หาย จะกู้ได้จาก',o:['ไม่มีทางกู้','git reflog','git stash','git tag'],a:1,e:'reflog เก็บประวัติตำแหน่ง HEAD ในเครื่อง'}
+ {q:'ต้องการนำ commit แก้บั๊กหนึ่งตัวจาก release/2.3 มาใส่ main',o:['git merge release/2.3','git cherry-pick <sha>','git rebase release/2.3','git revert <sha>'],a:1,e:'cherry-pick เอาเฉพาะ commit นั้น'},
+ {q:'ใน Git Flow hotfix แตกจากไหนและ merge กลับที่ใด',o:['develop → develop และ release','main → main และ develop','release → main เท่านั้น','develop → main และ develop'],a:1,e:'กันบั๊กกลับมาใน release ถัดไป'},
+ {q:'มี 300 commits ระหว่างเวอร์ชันดีกับเวอร์ชันพัง วิธีหาเร็วที่สุด',o:['git log --oneline แล้วไล่ทดสอบทีละตัว','git bisect','git blame ไฟล์ที่สงสัย','git diff ระหว่างสองเวอร์ชันทั้งก้อน'],a:1,e:'binary search ≈ 9 รอบ'},
+ {q:'เผลอ reset --hard แล้ว commit หาย จะกู้ได้จาก',o:['ไม่มีทางกู้ เพราะ --hard ลบถาวร','git reflog','git stash list','git fsck --lost-found เท่านั้น'],a:1,e:'reflog เก็บประวัติตำแหน่ง HEAD ในเครื่อง'}
  ]},
 
 {id:'oop', tab:'eng', comp:'OOP', w:7.05, target:'I', min:90, title:'OOP & SOLID & Design Patterns (C#)',
@@ -137,9 +137,9 @@ builder.Services.AddScoped<IShippingRate, Flash>();`},
  ],
  quiz:[
  {q:'เพิ่มช่องทางชำระเงินใหม่ต้องแก้ switch ทุกครั้ง ละเมิดหลักใด',o:['SRP','OCP','LSP','ISP'],a:1,e:'แก้ด้วย Strategy/polymorphism'},
- {q:'singleton service ที่ inject DbContext (scoped) เข้ามา เกิดปัญหาใด',o:['ไม่มีปัญหา','Captive dependency — DbContext ถูกใช้ข้าม request/thread','DbContext ถูกสร้างใหม่ทุกครั้ง','compile ไม่ผ่านเสมอ'],a:1,e:'lifetime ของ dependency ต้องไม่สั้นกว่าผู้ใช้'},
+ {q:'singleton service ที่ inject DbContext (scoped) เข้ามา เกิดปัญหาใด',o:['DbContext ถูกสร้างใหม่ทุกครั้งที่เรียก ทำให้ช้า','DbContext ติดอยู่ใน singleton ถูกใช้ข้าม request/thread','DI container จะ throw ทุกครั้งตอนแอปเริ่มทำงาน','transaction ของแต่ละ request จะถูก rollback เสมอ'],a:1,e:'lifetime ของ dependency ต้องไม่สั้นกว่าผู้ใช้'},
  {q:'เพิ่ม caching ให้ repository เดิมโดยไม่แก้ class เดิม ใช้ pattern ใด',o:['Decorator','Singleton','Builder','Prototype'],a:0,e:'ห่อ interface เดิมแล้วเพิ่มพฤติกรรม'},
- {q:'class ที่ implement interface แล้ว throw NotSupportedException ในหลาย method สะท้อนการละเมิดหลักใดมากที่สุด',o:['ISP (และ LSP)','DIP','SRP','ไม่ละเมิด'],a:0,e:'interface ใหญ่เกินไป บังคับ implement สิ่งที่ทำไม่ได้'}
+ {q:'class ที่ implement interface แล้ว throw NotSupportedException ในหลาย method สะท้อนการละเมิดหลักใดมากที่สุด',o:['ISP (และ LSP)','DIP','SRP','OCP (เพราะต้องแก้ class เดิม)'],a:0,e:'interface ใหญ่เกินไป บังคับ implement สิ่งที่ทำไม่ได้'}
  ]},
 
 {id:'test', tab:'eng', comp:'Unit & Functional Testing', w:5.69, target:'I', min:60, title:'Unit & Functional Testing (xUnit, Moq)',
@@ -178,9 +178,9 @@ email.Verify(e => e.SendAsync("a@x.com", It.IsAny<string>()), Times.Once);`},
  ],
  quiz:[
  {q:'ต้องการยืนยันว่า Send() ถูกเรียกหนึ่งครั้ง ใช้ test double ใด',o:['Stub','Mock','Dummy','Fake'],a:1,e:'Mock = behavior verification'},
- {q:'ลำดับ TDD ที่ถูกต้อง',o:['Green → Red → Refactor','Red → Green → Refactor','Refactor → Red → Green','เขียนโค้ดก่อนแล้วค่อยเขียน test'],a:1,e:''},
- {q:'coverage 95% แต่บั๊กหลุดบ่อย สาเหตุที่เป็นไปได้มากที่สุด',o:['coverage ต้อง 100%','assertion อ่อน/ไม่ครอบคลุม edge case','SonarQube ผิด','test เร็วเกินไป'],a:1,e:'coverage วัดการรัน ไม่ได้วัดการตรวจผล'},
- {q:'test ผ่านด้วย in-memory DB แต่ production พังเพราะ SQL จริง ควรเพิ่มอะไร',o:['mock DB ให้มากขึ้น','integration test กับ DB จริงผ่าน Testcontainers','ลบ test','รันบน production'],a:1,e:''}
+ {q:'ลำดับ TDD ที่ถูกต้อง',o:['Green → Red → Refactor','Red → Green → Refactor','Refactor → Red → Green','Red → Refactor → Green'],a:1,e:''},
+ {q:'coverage 95% แต่บั๊กหลุดบ่อย สาเหตุที่เป็นไปได้มากที่สุด',o:['ยังไม่ถึง 100% จึงมีบรรทัดที่ยังไม่ถูกรัน','assertion อ่อนและไม่ครอบคลุม edge case','unit test เร็วเกินไปจนจับ race condition ไม่ได้','เครื่องมือวัด coverage นับบรรทัดผิด'],a:1,e:'coverage วัดการรัน ไม่ได้วัดการตรวจผล'},
+ {q:'test ผ่านด้วย in-memory DB แต่ production พังเพราะ SQL จริง ควรเพิ่มอะไร',o:['mock repository ให้ละเอียดขึ้นทุก method','integration test กับ DB จริง (เช่น Testcontainers)','เพิ่ม unit test ของ service ให้ครบทุก branch','ใช้ SQLite in-memory แทน EF InMemory provider'],a:1,e:''}
  ]},
 
 {id:'mon', tab:'eng', comp:'Monitoring and Logging', w:5.69, target:'I', min:60, title:'Monitoring, Logging & Observability',
@@ -203,9 +203,9 @@ _logger.LogInformation("Order {OrderId} paid by {CustomerId} in {ElapsedMs} ms",
  {traps:['alert ที่ CPU > 70% อย่างเดียว ≠ คำตอบที่ดีที่สุด','ค่าเฉลี่ย latency ซ่อนปัญหา tail','post-mortem เพื่อหาคนผิด = ผิดหลัก']}
  ],
  quiz:[
- {q:'request ผ่าน 6 services แล้วช้า ต้องการรู้ว่าช้าที่ hop ไหน ใช้',o:['Metrics CPU','Distributed tracing','Log level Debug','Health check'],a:1,e:'trace แสดง span และเวลาของแต่ละ service'},
+ {q:'request ผ่าน 6 services แล้วช้า ต้องการรู้ว่าช้าที่ hop ไหน ใช้',o:['ดู metric CPU ของแต่ละ service','Distributed tracing','เปิด log level Debug ทุก service','Health check ของทุก service'],a:1,e:'trace แสดง span และเวลาของแต่ละ service'},
  {q:'SLO 99.9% ต่อ 30 วัน มี error budget ประมาณเท่าไร',o:['4.3 นาที','43.2 นาที','7.2 ชั่วโมง','1 วัน'],a:1,e:'43,200 นาที × 0.1%'},
- {q:'ใส่ label user_id ให้ metric แล้วระบบ monitoring ล่ม เพราะ',o:['user_id ยาว','high cardinality → time series ระเบิด','metric ต้องเป็นข้อความ','ต้องเปิด tracing'],a:1,e:'ข้อมูลรายผู้ใช้ไปอยู่ใน log/trace'},
- {q:'probe ใดที่ควร fail เมื่อ DB ยังเชื่อมไม่ได้ตอน start เพื่อไม่ให้รับ traffic',o:['Liveness','Readiness','Startup ไม่มีผล','ไม่ต้องมี'],a:1,e:'liveness fail จะทำให้ถูก restart วนไม่จบ'}
+ {q:'ใส่ label user_id ให้ metric แล้วระบบ monitoring ล่ม เพราะ',o:['ค่า user_id ยาวเกินขนาด label ที่รองรับ','high cardinality ทำให้จำนวน time series ระเบิด','metric ต้องเป็นตัวเลข ใส่ label ข้อความไม่ได้','ต้องเปิด tracing ก่อนจึงใส่ label ได้'],a:1,e:'ข้อมูลรายผู้ใช้ไปอยู่ใน log/trace'},
+ {q:'probe ใดที่ควร fail เมื่อ DB ยังเชื่อมไม่ได้ตอน start เพื่อไม่ให้รับ traffic',o:['Liveness','Readiness','Startup','ไม่ต้องมี probe เลย'],a:1,e:'liveness fail จะทำให้ถูก restart วนไม่จบ'}
  ]}
 ];
