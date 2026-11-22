@@ -18,7 +18,7 @@ function render(){
   const [view, arg] = parseRoute(), m = document.getElementById('main');
   m.innerHTML = '';
   const n = document.getElementById('nav'); n.innerHTML = '';
-  const active = view === 'lesson' ? 'learn' : view;
+  const active = view === 'lesson' ? 'learn' : view === 'hr' ? 'exam' : view;
   NAV.forEach(([id, label]) => {
     const b = el('button', id === active ? 'on' : ''); b.innerHTML = ICON[id]; b.appendChild(el('span', null, label));
     b.onclick = () => nav('/' + (id === 'practice' ? 'practice/' + (ST.practice || 'mcq') : id)); n.appendChild(b);
@@ -29,6 +29,7 @@ function render(){
   else if (view === 'lesson' && lessonById(arg)) viewLesson(m, lessonById(arg));
   else if (view === 'practice') viewPractice(m, arg || ST.practice || 'mcq');
   else if (view === 'exam') viewExam(m);
+  else if (view === 'hr') viewHr(m);
   else viewToday(m);
 }
 window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
@@ -389,6 +390,7 @@ function viewDrill(m){
 /* ---------- สอบ ---------- */
 function viewExam(m){
   m.appendChild(el('h1', null, 'ข้อสอบจำลอง'));
+  { const a = el('a', 'card exam-card hr-card'); a.href = '#/hr'; a.appendChild(el('b', null, 'จำลอง HackerRank — 8 section แยกเวลา' + (ST.hr && !ST.hr.results ? ' (มีที่ทำค้าง)' : ''))); a.appendChild(el('div', 'muted', 'รูปแบบเดียวกับข้อสอบจริง · สอบครบ 145 นาที หรือเลือกซ้อมทีละ section ตามเวลาจริง')); m.appendChild(a); }
   m.appendChild(el('p', 'muted', `V1 61 ข้อ · V2 46 ข้อ · ให้คะแนนถ่วงน้ำหนักและเทียบเกณฑ์ระดับ ${role()} รายทักษะ (เปลี่ยนเป้าหมายได้ที่หน้าวันนี้)`));
   [['final', 'Final — จับเวลาเหมือนสอบจริง', 'นับถอยหลัง หมดเวลาส่งอัตโนมัติ · ปิดแอปแล้วเวลายังเดิน · เตือนเมื่อเหลือ 10/5/1 นาที'],
    ['practice', 'ฝึกซ้อม — ไม่จับเวลา', 'ทำสบาย ๆ ส่งเมื่อพร้อม ดูเฉลยละเอียดหลังส่ง']].forEach(([k, t, d]) => {

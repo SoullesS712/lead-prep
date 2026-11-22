@@ -11,8 +11,8 @@ def rd(p):
     return io.open(os.path.join(here, p), encoding='utf8').read()
 
 
-DATA = ['lessons1.js', 'lessons2.js', 'prog.js', 'lessons_extra.js', 'prog2.js', 'labs.js', 'sql2.js', 'prompt2.js', 'posttests.js', 'bank.js']
-CODE = ['core.js', 'runner.js', 'views.js']
+DATA = ['lessons1.js', 'lessons2.js', 'prog.js', 'lessons_extra.js', 'prog2.js', 'prog3.js', 'labs.js', 'sql2.js', 'prompt2.js', 'posttests.js', 'lessons_hr.js', 'bank.js', 'hr_data.js']
+CODE = ['core.js', 'runner.js', 'views.js', 'hr.js']
 BOOT = """
 render();
 if (IN_APP) sendSchedule();

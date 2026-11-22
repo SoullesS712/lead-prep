@@ -3,7 +3,7 @@
 // รัน: node src/tests/bias.js   (exit code 1 ถ้าไม่ผ่าน)
 const fs = require('fs'), path = require('path');
 const SRC = path.join(__dirname, '..');
-const src = ['lessons1.js', 'lessons2.js', 'prog.js', 'labs.js', 'posttests.js', 'bank.js']
+const src = ['lessons1.js', 'lessons2.js', 'prog.js', 'labs.js', 'posttests.js', 'lessons_hr.js', 'bank.js']
   .filter(f => fs.existsSync(path.join(SRC, f))).map(f => fs.readFileSync(path.join(SRC, f), 'utf8')).join('\n');
 const m = {}; new Function('m', src + ';m.L=LESSONS;m.P=POST;m.B=typeof BANK!=="undefined"?BANK:{}')(m);
 const html = fs.readFileSync(path.join(SRC, '..', 'competency-2026-exam.html'), 'utf8');

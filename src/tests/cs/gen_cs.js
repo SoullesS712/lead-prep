@@ -1,7 +1,7 @@
 // สร้าง Solution.cs (เฉลย C# ทุกข้อ) + tests.json (ทุก test รวม performance) สำหรับรันตรวจด้วย .NET
 const fs = require('fs'), path = require('path');
 const S = path.join(__dirname, '..', '..') + '/', OUT = __dirname;
-const src = ['prog.js', 'prog2.js'].map(f => fs.readFileSync(S + f, 'utf8')).join('\n');
+const src = ['prog.js', 'prog2.js', 'prog3.js'].map(f => fs.readFileSync(S + f, 'utf8')).join('\n');
 const LESSONS = []; const m = {}; new Function('LESSONS', 'm', src + ';m.P=PROBLEMS;m.G=GEN')(LESSONS, m);
 const pascal = s => s[0].toUpperCase() + s.slice(1);
 const indent = t => t.split('\n').map(l => '    ' + l).join('\n');

@@ -28,7 +28,7 @@ global.AppBridge={postMessage:m=>bridgeMsgs.push(JSON.parse(m))};
 const txt=()=>ids.main.textContent;
 const btn=(root,re)=>find(root,n=>n.tagName==='button'&&re.test(n.textContent))[0];
 (async()=>{
- const A=new Function(src.replace("render();\nif (IN_APP)","/*boot*/render();\nif (IN_APP)")+';return {get ST(){return ST},render,LESSONS,POST,BANK,UNITS,buildPlan,unitDone,PROBLEMS,SQL_EX,PROMPT_TASKS};')();
+ const A=new Function(src.replace("render();\nif (IN_APP)","/*boot*/render();\nif (IN_APP)")+';return {get ST(){return ST},render,hrClose,hrStart,HR_SECTIONS,HR_PROMPT,PROBLEMS,LESSONS,POST,BANK,UNITS,buildPlan,unitDone,PROBLEMS,SQL_EX,PROMPT_TASKS};')();
  const sched=bridgeMsgs.find(m=>m.type==='schedule');
  console.log('boot: nav',ids.nav.children.length,'chip',ids.countChip.textContent,'| schedule msg items',sched&&sched.items.length);
  console.log('  first notif:',new Date(sched.items[0].at).toString().slice(0,21),'|',sched.items[0].title,'|',sched.items[0].body,'|',sched.items[0].hash);
@@ -105,5 +105,37 @@ const btn=(root,re)=>find(root,n=>n.tagName==='button'&&re.test(n.textContent))[
  btn(ids.main,/ทำชุดใหม่/).onclick();
  btn(find(ids.main,n=>n._c.has('seg'))[2],/เคยตอบผิด/).onclick();
  console.log('wrong-only mode start button:',btn(ids.main,/^เริ่มฝึก/)?.textContent,'| weak list rows',find(ids.main,n=>n._c.has('item')&&/ตอบไป/.test(n.textContent)).length);
+ // ---- จำลอง HackerRank ----
+ location.hash='/exam'; console.log('exam has HR card:',/จำลอง HackerRank/.test(txt()));
+ location.hash='/hr';
+ const practiceBtns=find(ids.main,n=>n.tagName==='button'&&n.textContent==='ซ้อม');
+ console.log('hr intro sections:',practiceBtns.length,'| full button:',!!btn(ids.main,/สอบครบ 8 section/));
+ practiceBtns[3].onclick();   // Security 4 ข้อ 10 นาที
+ let H=A.ST.hr, S=H.secs.s4;
+ console.log('single Security: items',S.items.length,'| multi included',S.items.some(q=>q.multi),'| deadline min',Math.round((H.deadline-Date.now())/60000));
+ S.items.forEach((q,i)=>{ S.ans[i]= i===0 ? (Array.isArray(q.a)?[]:(q.a+1)%q.o.length) : q.a; });
+ await A.hrClose(false); H=A.ST.hr;
+ console.log('security graded:',JSON.stringify(H.secs.s4.grade),'| results',H.results,'| hist',A.ST.hrHist.length,'| result text',/ผลการจำลอง HackerRank/.test(txt()));
+ btn(ids.main,/กลับหน้าซ้อม/).onclick();
+ // Coding section เดี่ยว ใส่เฉลย
+ find(ids.main,n=>n.tagName==='button'&&n.textContent==='ซ้อม')[7].onclick();
+ H=A.ST.hr; S=H.secs.s8; const P=A.PROBLEMS.find(p=>p.id===S.task); S.code=P.sol;
+ await A.hrClose(false);
+ console.log('coding',S.task,'graded:',JSON.stringify(A.ST.hr.secs.s8.grade));
+ A.ST.hr=null; A.render();
+ // Prompt section เดี่ยว ตอบตรงทุกเคส
+ find(ids.main,n=>n.tagName==='button'&&n.textContent==='ซ้อม')[6].onclick();
+ H=A.ST.hr; S=H.secs.s7; const T=A.HR_PROMPT.find(t=>t.id===S.task); S.prompt=T.sample; T.cases.forEach((c,i)=>S.caseOut[i]=c.output);
+ await A.hrClose(false);
+ console.log('prompt',S.task,'graded:',JSON.stringify(A.ST.hr.secs.s7.grade));
+ A.ST.hr=null; A.render();
+ // สอบเต็ม: ปิดทีละ section
+ A.hrStart([0,1,2,3,4,5,6,7]); H=A.ST.hr;
+ console.log('full: s1 items',H.secs.s1.items.length,'s1 multi',H.secs.s1.items.filter(q=>q.multi).length);
+ for(let k=0;k<8;k++){ const sec=A.HR_SECTIONS[H.order[H.pos]]; if(k===1) console.log('  s2 items',H.secs.s2.items.length); await A.hrClose(false); }
+ console.log('full finished:',A.ST.hr.results,'| sections graded',Object.values(A.ST.hr.secs).filter(x=>x.grade).length,'| hist mode',A.ST.hrHist.at(-1).mode);
+ // หมดเวลา: ปิด section อัตโนมัติ
+ A.ST.hr=null; A.hrStart([4]); A.ST.hr.deadline=Date.now()-1000; A.render(); await new Promise(r=>setTimeout(r,50));
+ console.log('timeout auto-close:',A.ST.hr.results===true);
  const B=new Function(src.replace(/render\(\);\nif \(IN_APP\) sendSchedule\(\);/,'')+';return {get ST(){return ST}};')(); console.log('persist: post',JSON.stringify(B.ST.post.sysd),'prob',Object.keys(B.ST.prob).join(','));
 })().catch(e=>console.error('ERR',e.stack)).finally(()=>process.exit(0));

@@ -90,3 +90,13 @@ button.choice b{font-size:1.02rem}
 .chipbtn.on{border-color:var(--blue);background:var(--accent-soft);color:var(--blue);font-weight:600}
 .seg button small{display:block;font-size:.72rem;font-weight:500;color:var(--muted);margin-top:1px}
 .seg button.on small{color:var(--blue)}
+.hr-card{border-color:var(--blue)}
+.hr-bar{position:sticky;top:0;z-index:15;background:var(--bg);display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:10px}
+.hr-timer{font-weight:700;font-size:.88rem;font-variant-numeric:tabular-nums;padding:5px 12px;border-radius:999px;background:var(--ok-soft);color:var(--green);white-space:nowrap}
+.hr-timer.warn{background:var(--warn-soft);color:var(--yellow)}.hr-timer.danger{background:var(--bad-soft);color:var(--red)}
+.hr-secname{flex:1;font-weight:600;font-size:.9rem;min-width:0}
+.hr-nav{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+.hr-num{font:inherit;font-size:.82rem;width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);color:var(--muted);cursor:pointer}
+.hr-num.done{background:var(--accent-soft);color:var(--blue);border-color:transparent}
+.hr-num.cur{box-shadow:0 0 0 2px var(--blue) inset;color:var(--text)}
+.hr-num.mark{border-color:var(--yellow)}

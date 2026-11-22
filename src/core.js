@@ -9,12 +9,12 @@ const COMPS = [
 const ROLES = ['Junior', 'Senior', 'Lead', 'Expert', 'Manager'];
 const EXP = {code:'BIIAB', sysd:'BIIAI', db:'BIIAI', git:'BIIAB', fe:'BIAAB', oop:'BIIAB', sql:'BIIAB', prompt:'BIIAB', micro:'BIIAI',
   sqlt:'BIIAB', mon:'BIIAI', test:'BIIAB', sec:'BIIAI', cont:'BIIAB', cloud:'IIIAI', cicd:'BIIAB', ai:'BIIIB'};
-const LESSON_COMP = {algo:'code', sqlt:'sqlt', pc:'prompt', sysd:'sysd', db:'db', micro:'micro', git:'git', oop:'oop', test:'test',
+const LESSON_COMP = {hr:'code', algo:'code', sqlt:'sqlt', pc:'prompt', sysd:'sysd', db:'db', micro:'micro', git:'git', oop:'oop', test:'test',
   mon:'mon', fe:'fe', api:'fe', sec:'sec', cont:'cont', cicd:'cicd', cloud:'cloud', ai:'ai'};
 const CUT = {B:30, I:50, A:70};
 const PASS_OPTIONS = [60, 70, 80, 90];
 const GROUPS = [
-  ['ฝึกมือ (น้ำหนักสูงสุด)', ['algo', 'sqlt', 'pc']],
+  ['ฝึกมือ (น้ำหนักสูงสุด)', ['hr', 'algo', 'sqlt', 'pc']],
   ['Architecture', ['sysd', 'db', 'micro']],
   ['Web & API', ['fe', 'api']],
   ['Engineering', ['oop', 'git', 'test', 'mon']],
@@ -64,7 +64,7 @@ async function copyText(text, btn){
 }
 const lessonById = id => LESSONS.find(l => l.id === id);
 // ชื่อสั้นสำหรับปุ่มเลือกบท (ไม่ตัดกลางคำ)
-const CHIP = {algo:'Coding', sqlt:'SQL', pc:'Prompt', sysd:'System Design', db:'Database', micro:'Microservices',
+const CHIP = {hr:'HackerRank', algo:'Coding', sqlt:'SQL', pc:'Prompt', sysd:'System Design', db:'Database', micro:'Microservices',
   fe:'Frontend', api:'Backend & API', oop:'OOP', git:'Git', test:'Testing', mon:'Monitoring', sec:'Security',
   cont:'Container', cicd:'CI/CD', cloud:'Cloud', ai:'AI'};
 const shortTitle = l => l.title.split(' — ')[0];
@@ -95,6 +95,7 @@ const UNITS = [
   {id:'u14', t:'Prompt Coding + Prompt Lab', h:2, lessons:['pc'], prompts:true},
   {id:'u15', t:'Container + CI/CD + Cloud + AI', h:2, lessons:['cont', 'cicd', 'cloud', 'ai']},
   {id:'u16', t:'ทบทวน — ทำ post-test ที่ยังไม่ผ่านให้ผ่านทุกบท', h:1.5, review:true},
+  {id:'uhr', t:'เตรียมสอบ HackerRank + จำลอง 8 section แยกเวลา', h:3, lessons:['hr'], hr:true},
   {id:'u17', t:'สอบจำลอง V1 แบบ Final', h:2, manual:true, exam:true},
   {id:'u18', t:'ทบทวนทักษะที่ยังไม่ถึงเกณฑ์จากผลสอบ V1', h:1.5, manual:true},
   {id:'u19', t:'สอบ V2 แบบ Final รอบสุดท้าย เทียบกับครั้งแรก', h:2, manual:true, exam:true}
@@ -114,6 +115,7 @@ function unitDone(u){
 // หน่วยนี้ควรพาไปหน้าไหน (บทที่ยังไม่ผ่านก่อน แล้วค่อยไปโจทย์)
 function unitRoute(u){
   if (u.exam) return 'competency-2026-exam.html#final';
+  if (u.hr && lessonPassed('hr')) return '#/hr';
   const l = (u.lessons || []).find(id => !lessonPassed(id));
   if (l) return '#/lesson/' + l;
   if (u.probs) return '#/practice/code';
