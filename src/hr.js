@@ -102,7 +102,7 @@ function hrIntro(m){
   const t = el('table'); t.innerHTML = '<tr><th>#</th><th>Section</th><th>ข้อ</th><th>เวลา</th><th></th></tr>';
   HR_SECTIONS.forEach((s, i) => {
     const tr = el('tr');
-    [String(i + 1), s.name, String(s.n), s.min + ' นาที'].forEach(v => tr.appendChild(el('td', null, v)));
+    [String(i + 1), s.name, String(s.n), s.min + ' นาที'].forEach((v, k) => tr.appendChild(el('td', k === 3 ? 'nowrap' : null, v)));
     const td = el('td'), go = el('button', 'btn small', 'ซ้อม'); go.onclick = () => hrStart([i]); td.appendChild(go); tr.appendChild(td);
     t.appendChild(tr);
   });
