@@ -1,0 +1,21 @@
+competency-2026-train.html
+  s_a77a31b6d8d954::t_8dcd2fc0b5e5e2 2773
+src/hr.js
+  s_a77a31b6d8d954::t_a01db2bfcc1dc5 105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.3",
+  "base_commit_sha": "d55af31bd813cc452aad1a691116a7b14cfb705d",
+  "prompts": {},
+  "sessions": {
+    "s_a77a31b6d8d954": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "941e6151-45ec-418f-bd70-3b29dd8257e3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "SoullesS712 <sakyasorn62@gmail.com>"
+    }
+  }
+}
